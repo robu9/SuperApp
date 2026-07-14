@@ -2,7 +2,8 @@ import React, { useEffect, useRef, useState } from "react";
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
-import { api, type FrameRow } from "@/lib/api/client";
+import { api, loadFrameImageSrc, type FrameRow } from "@/lib/api/client";
+import { useRecordingStore } from "@/lib/stores/recording-store";
 import { format } from "date-fns";
 
 function formatFrameTime(timestamp: string): string {
@@ -18,11 +19,15 @@ export function TimelineSection() {
   const [current, setCurrent] = useState(0);
   const [frameText, setFrameText] = useState("");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [imageError, setImageError] = useState(false);
   const [loading, setLoading] = useState(true);
   const followLatestRef = useRef(true);
   const thumbStripRef = useRef<HTMLDivElement>(null);
   const currentRef = useRef(0);
+  const imageObjectUrlRef = useRef<string | null>(null);
   currentRef.current = current;
+  const isGloballyPaused = useRecordingStore((s) => s.isGloballyPaused);
+  const resumeAll = useRecordingStore((s) => s.resumeAll);
 
   useEffect(() => {
     async function loadFrames() {
@@ -63,24 +68,31 @@ export function TimelineSection() {
     if (!frame) return;
 
     async function loadFrameDetail() {
+      setImageError(false);
+      if (imageObjectUrlRef.current?.startsWith("blob:")) {
+        URL.revokeObjectURL(imageObjectUrlRef.current);
+        imageObjectUrlRef.current = null;
+      }
       try {
-        const [textRes, imageRes] = await Promise.all([
-          api.frameText(frame.id),
-          api.frameImage(frame.id),
-        ]);
+        const textRes = await api.frameText(frame.id);
         setFrameText(textRes.text || "no text captured");
-        if (imageRes.image_base64) {
-          setImageSrc(`data:image/jpeg;base64,${imageRes.image_base64}`);
-        } else {
-          setImageSrc(null);
-        }
+        const src = await loadFrameImageSrc(frame.id);
+        imageObjectUrlRef.current = src.startsWith("blob:") ? src : null;
+        setImageSrc(src);
       } catch {
         setFrameText("failed to load frame");
         setImageSrc(null);
+        setImageError(true);
       }
     }
 
     void loadFrameDetail();
+    return () => {
+      if (imageObjectUrlRef.current?.startsWith("blob:")) {
+        URL.revokeObjectURL(imageObjectUrlRef.current);
+        imageObjectUrlRef.current = null;
+      }
+    };
   }, [frames, current]);
 
   useEffect(() => {
@@ -89,7 +101,6 @@ export function TimelineSection() {
     const active = strip.querySelector<HTMLElement>('[data-active="true"]');
     if (!active) return;
 
-    // Scroll only inside the thumbnail strip — scrollIntoView scrolls ancestors and breaks layout.
     const target =
       active.offsetLeft - strip.clientWidth / 2 + active.clientWidth / 2;
     const maxScroll = strip.scrollWidth - strip.clientWidth;
@@ -132,8 +143,13 @@ export function TimelineSection() {
             browse your screen history
           </p>
         </div>
-        <div className="flex-1 flex items-center justify-center text-muted-foreground font-mono text-sm lowercase">
-          no frames captured yet — recording will populate this view
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground font-mono text-sm lowercase">
+          <p>no frames captured yet — screen recording will populate this view</p>
+          {isGloballyPaused && (
+            <Button variant="outline" size="sm" onClick={() => void resumeAll()} className="font-mono text-xs">
+              resume screen recording
+            </Button>
+          )}
         </div>
       </div>
     );
@@ -149,7 +165,7 @@ export function TimelineSection() {
           <h1 className="text-2xl font-mono lowercase">timeline</h1>
           <p className="text-sm text-muted-foreground font-mono mt-1">
             browse your screen history · {frames.length} frames
-            {followLatestRef.current && atLatest ? " · live" : ""}
+            {followLatestRef.current && atLatest && !isGloballyPaused ? " · live" : ""}
           </p>
         </div>
         {!atLatest && (
@@ -158,20 +174,38 @@ export function TimelineSection() {
           </Button>
         )}
       </div>
+
+      {isGloballyPaused && (
+        <div className="mx-6 mt-4 flex items-center justify-between gap-4 border border-border bg-surface px-4 py-3">
+          <p className="text-xs font-mono text-muted-foreground lowercase">
+            screen recording is paused — audio may still be recording. resume to capture new frames.
+          </p>
+          <Button variant="outline" size="sm" onClick={() => void resumeAll()} className="font-mono text-xs lowercase shrink-0">
+            resume screen
+          </Button>
+        </div>
+      )}
+
       <div className="flex-1 flex flex-col min-h-0 min-w-0 p-6 gap-4 overflow-hidden">
         <div className="flex-1 border border-border bg-surface flex items-center justify-center relative min-h-[300px] overflow-hidden">
-          {imageSrc ? (
+          {imageSrc && !imageError ? (
             <img
               src={imageSrc}
               alt={`frame ${frame.id}`}
               className="max-w-full max-h-full object-contain"
+              onError={() => setImageError(true)}
             />
           ) : (
-            <div className="text-center">
+            <div className="text-center px-6">
               <div className="text-6xl font-mono text-muted-foreground/30 mb-4">▦</div>
               <p className="text-sm font-mono text-muted-foreground lowercase">
                 frame {frame.id} — {formatFrameTime(frame.timestamp)}
               </p>
+              {imageError && (
+                <p className="text-xs font-mono text-muted-foreground mt-2 lowercase">
+                  screenshot preview unavailable
+                </p>
+              )}
             </div>
           )}
           <div className="absolute bottom-0 left-0 right-0 bg-background/90 border-t border-border p-3">
@@ -216,7 +250,7 @@ export function TimelineSection() {
                 i === current
                   ? "border-foreground bg-foreground text-background"
                   : "border-border text-muted-foreground hover:border-foreground",
-                i === frames.length - 1 && followLatestRef.current && "ring-1 ring-foreground/40"
+                i === frames.length - 1 && followLatestRef.current && !isGloballyPaused && "ring-1 ring-foreground/40"
               )}
             >
               {formatFrameTime(f.timestamp)}

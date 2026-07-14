@@ -15,6 +15,9 @@ export function initDatabase(): DatabaseSync {
   fs.mkdirSync(AUDIO_DIR, { recursive: true });
 
   db = new DatabaseSync(DB_PATH);
+  db.exec("PRAGMA journal_mode = WAL");
+  db.exec("PRAGMA synchronous = NORMAL");
+  db.exec("PRAGMA busy_timeout = 10000");
   db.exec(SCHEMA_SQL);
   return db;
 }
@@ -380,10 +383,24 @@ export function getRecentAudioContext(limit = 5): RecentContextItem[] {
 
 /** Merged recent screen + audio context, newest first. */
 export function getRecentContext(limit = 12): RecentContextItem[] {
-  const combined = [...getRecentScreenContext(limit), ...getRecentAudioContext(5)];
-  return combined
-    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
-    .slice(0, limit);
+  for (let attempt = 0; attempt < 3; attempt++) {
+    try {
+      const combined = [
+        ...getRecentScreenContext(limit),
+        ...getRecentAudioContext(5),
+      ];
+      return combined
+        .sort(
+          (a, b) =>
+            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+        )
+        .slice(0, limit);
+    } catch (err) {
+      const message = err instanceof Error ? err.message : String(err);
+      if (!message.includes("locked") || attempt === 2) throw err;
+    }
+  }
+  return [];
 }
 
 export function getStats(): {

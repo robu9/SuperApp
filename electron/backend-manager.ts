@@ -119,7 +119,14 @@ async function killProcessOnPort(port: number): Promise<void> {
 }
 
 export async function startBackend(): Promise<void> {
-  if (backendProcess && !backendProcess.killed) {
+  // In dev, always restart so backend TypeScript changes are picked up.
+  if (!app.isPackaged) {
+    if (backendProcess && !backendProcess.killed) {
+      backendProcess.kill("SIGTERM");
+      backendProcess = null;
+    }
+    await killProcessOnPort(API_PORT);
+  } else if (backendProcess && !backendProcess.killed) {
     const hasChat = await backendHasChatRoute();
     if (hasChat) {
       await waitForHealth(5);
@@ -130,11 +137,13 @@ export async function startBackend(): Promise<void> {
   }
 
   const hasChat = await backendHasChatRoute();
-  if (!hasChat) {
-    await killProcessOnPort(API_PORT);
-  } else {
+  if (!app.isPackaged) {
+    // Port cleared above — always spawn fresh in dev.
+  } else if (hasChat) {
     await waitForHealth(5);
     return;
+  } else {
+    await killProcessOnPort(API_PORT);
   }
 
   const { command, args, cwd } = getBackendEntry();

@@ -86,6 +86,15 @@ async function getBaseUrl(): Promise<string> {
   return FALLBACK_API;
 }
 
+export async function getApiBaseUrl(): Promise<string> {
+  return getBaseUrl();
+}
+
+export async function frameImageUrl(id: number): Promise<string> {
+  const base = await getBaseUrl();
+  return `${base}/frames/${id}/image`;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -155,3 +164,23 @@ export const api = {
   audioStop: () => request<{ recording: boolean }>("POST", "/audio/stop"),
   chat: (body: ChatRequest) => request<ChatResponse>("POST", "/chat", body),
 };
+
+/** Load a frame screenshot for display — base64 via API first (Electron-safe), then binary URL. */
+export async function loadFrameImageSrc(id: number): Promise<string> {
+  try {
+    const data = await api.frameImage(id);
+    if (data.image_base64) {
+      return `data:image/jpeg;base64,${data.image_base64}`;
+    }
+  } catch {
+    // fall through to direct fetch
+  }
+
+  const base = await getBaseUrl();
+  const res = await fetch(`${base}/frames/${id}/image`);
+  if (!res.ok) {
+    throw new Error(`frame image unavailable (${res.status})`);
+  }
+  const blob = await res.blob();
+  return URL.createObjectURL(blob);
+}

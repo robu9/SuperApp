@@ -94,6 +94,23 @@ app.get("/activity-summary", (c) => {
   return c.json(getActivitySummary(start, end));
 });
 
+app.get("/frames/:id/image", (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "invalid frame id" }, 400);
+  const frame = getFrameById(id);
+  if (!frame) return c.json({ error: "frame not found" }, 404);
+  if (!frame.image_path || !existsSync(frame.image_path)) {
+    return c.json({ error: "image not found" }, 404);
+  }
+  const buffer = readFileSync(frame.image_path);
+  return new Response(buffer, {
+    headers: {
+      "Content-Type": "image/jpeg",
+      "Cache-Control": "public, max-age=300",
+    },
+  });
+});
+
 app.get("/frames/:id", async (c) => {
   const id = Number(c.req.param("id"));
   const frame = getFrameById(id);
@@ -237,7 +254,10 @@ app.post("/chat", async (c) => {
     const engine = captureEngine.state;
 
     // Always include recent screen + audio context (not keyword-dependent)
-    const recent = getRecentContext(12);
+    let recent = getRecentContext(12);
+    if (recent.length === 0 && stats.framesCaptured > 0) {
+      recent = getRecentContext(12);
+    }
     const contextSnippets: string[] = recent.map((item) => {
       const sourceLabel = item.source === "audio" ? "[audio]" : "[screen]";
       const parts = [

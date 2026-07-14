@@ -85,20 +85,37 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
             const Icon = device.active
               ? KIND_ICONS[device.kind].active
               : KIND_ICONS[device.kind].paused;
+            const isMonitor = device.kind === "monitor";
             return (
-              <button
+              <div
                 key={device.fullName}
-                onClick={() => toggleDevice(device.fullName)}
-                className="flex items-center justify-between px-4 py-3 border-b border-border hover:bg-accent transition-colors duration-150 text-sm font-mono"
+                className={cn(
+                  "flex items-center justify-between px-4 py-3 border-b border-border text-sm font-mono",
+                  !isMonitor && "hover:bg-accent transition-colors duration-150"
+                )}
               >
                 <div className="flex items-center gap-3">
                   <Icon className="w-4 h-4" />
                   <span className="lowercase">{device.name}</span>
                 </div>
-                <span className="text-xs uppercase tracking-wide text-muted-foreground">
-                  {device.active ? "on" : "off"}
-                </span>
-              </button>
+                {isMonitor ? (
+                  <button
+                    type="button"
+                    onClick={() => (isScreenPaused ? resumeAll() : pauseAll())}
+                    className="text-xs uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {device.active ? "on" : "off"}
+                  </button>
+                ) : (
+                  <button
+                    type="button"
+                    onClick={() => toggleDevice(device.fullName)}
+                    className="text-xs uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                  >
+                    {device.active ? "on" : "off"}
+                  </button>
+                )}
+              </div>
             );
           })}
         </div>

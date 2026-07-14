@@ -28,36 +28,64 @@ function buildSystemInstruction(
 ): string {
   const hasHistory = contextSnippets.length > 0;
   const statusLines = [
-    `Screen recording: ${recording.screenRecording ? "active" : "paused/off"} (${recording.framesCaptured} frames captured)`,
+    `Screen recording: ${recording.screenRecording ? "active" : "paused/off"} (${recording.framesCaptured} frames in database)`,
     `Audio recording: ${recording.audioRecording ? "active" : "off"} (${recording.audioChunks} transcriptions stored)`,
-    `Captured history available: ${hasHistory ? "yes" : "no"}`,
+    `Captured history snippets attached: ${contextSnippets.length}`,
   ].join("\n");
-
-  const contextBlock = hasHistory
-    ? `\n\nRecent screen & audio history from the user's machine (you CAN use this to answer — it is real captured data, even if live recording is currently paused):\n${contextSnippets
-        .slice(0, 12)
-        .map((snippet, i) => `${i + 1}. ${snippet.slice(0, 600)}`)
-        .join("\n")}`
-    : recording.framesCaptured > 0
-      ? "\n\nScreen frames exist in the database but no readable text was extracted from recent captures."
-      : "\n\nNo screen history is available yet — the capture engine may have just started.";
 
   return [
     "You are SuperApp, a helpful AI assistant inside a desktop app that records the user's screen and audio locally.",
     "Answer clearly and concisely. Use lowercase, friendly tone unless the user prefers otherwise.",
-    "When screen/audio history is provided below, you HAVE seen and heard that content — use it to give specific, grounded answers about what the user was doing.",
-    "Do NOT say you cannot see or hear the user when captured history is provided below. Distinguish between live recording status (paused/active) and historical context you already have.",
-    "If the user asks whether you have seen or heard something, check the history below first and answer based on that data.",
-    `Current recording status:\n${statusLines}`,
-    contextBlock,
-  ].join("");
+    "CRITICAL RULES:",
+    "- The user's captured screen/audio history is provided in this conversation (not live video). You already have it.",
+    "- NEVER say you can only answer if recording is enabled. NEVER offer to turn on recording when frames exist in the database or history snippets are provided.",
+    "- NEVER say you don't have screen history when history snippets are in the conversation.",
+    "- If the user asks about something not in the history, say what you DO see in the history instead.",
+    "- If the user asks what they were watching or doing, answer from the history snippets directly.",
+    `Current capture status:\n${statusLines}`,
+    hasHistory
+      ? "History snippets are in the messages below — use them."
+      : recording.framesCaptured > 0
+        ? "Frames exist but no readable text was extracted from recent captures."
+        : "No captures yet — the engine may have just started.",
+  ].join("\n");
 }
 
-function toGeminiContents(messages: ChatTurn[]) {
-  return messages.map((message) => ({
-    role: message.role === "assistant" ? "model" : "user",
-    parts: [{ text: message.content }],
-  }));
+function toGeminiContents(messages: ChatTurn[], contextSnippets: string[] = []) {
+  const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+
+  if (contextSnippets.length > 0) {
+    const historyBlock = contextSnippets
+      .slice(0, 12)
+      .map((snippet, i) => `${i + 1}. ${snippet.slice(0, 800)}`)
+      .join("\n");
+
+    contents.push({
+      role: "user",
+      parts: [
+        {
+          text: `Here is my recent captured screen and audio activity from SuperApp:\n\n${historyBlock}\n\nRemember this for my questions.`,
+        },
+      ],
+    });
+    contents.push({
+      role: "model",
+      parts: [
+        {
+          text: "got it — i have your recent screen and audio history and i'll use it to answer your questions.",
+        },
+      ],
+    });
+  }
+
+  for (const message of messages) {
+    contents.push({
+      role: message.role === "assistant" ? "model" : "user",
+      parts: [{ text: message.content }],
+    });
+  }
+
+  return contents;
 }
 
 export async function generateGeminiReply(
@@ -91,7 +119,7 @@ export async function generateGeminiReply(
         systemInstruction: {
           parts: [{ text: buildSystemInstruction(contextSnippets, recording) }],
         },
-        contents: toGeminiContents(conversation),
+        contents: toGeminiContents(conversation, contextSnippets),
       }),
     }
   );

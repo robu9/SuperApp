@@ -68,8 +68,6 @@ function mergeDevicesOnSync(
   if (nextDevices.length === 0) return previous;
 
   const prevActive = new Map(previous.map((d) => [d.fullName, d.active]));
-  const pausedChanged =
-    lastBackend.paused !== null && backend.paused !== lastBackend.paused;
   const audioChanged =
     lastBackend.audioRecording !== null &&
     backend.audioRecording !== lastBackend.audioRecording;
@@ -79,13 +77,7 @@ function mergeDevicesOnSync(
     const wasActive = prevActive.get(device.fullName);
 
     if (device.kind === "monitor") {
-      if (isFirstSync) {
-        return { ...device, active: !backend.paused };
-      }
-      if (pausedChanged) {
-        return { ...device, active: !backend.paused };
-      }
-      return { ...device, active: wasActive ?? !backend.paused };
+      return { ...device, active: !backend.paused };
     }
 
     if (device.kind === "input") {
@@ -150,35 +142,10 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
     const device = state.devices.find((d) => d.fullName === fullName);
     if (!device) return;
 
+    // Monitors mirror screen capture state — use pause all / resume all instead.
+    if (device.kind === "monitor") return;
+
     const nextActive = !device.active;
-
-    if (device.kind === "monitor") {
-      const monitors = state.devices.filter((d) => d.kind === "monitor");
-      const allMonitorsOff = monitors.every((d) =>
-        d.fullName === fullName ? !nextActive : !d.active
-      );
-      const anyMonitorOn = monitors.some((d) =>
-        d.fullName === fullName ? nextActive : d.active
-      );
-
-      set({
-        devices: state.devices.map((d) =>
-          d.fullName === fullName ? { ...d, active: nextActive } : d
-        ),
-        isGloballyPaused: allMonitorsOff,
-        lastBackendPaused: allMonitorsOff ? true : anyMonitorOn ? false : state.lastBackendPaused,
-      });
-
-      void (async () => {
-        try {
-          if (allMonitorsOff) await api.enginePause();
-          else if (state.isGloballyPaused && nextActive) await api.engineResume();
-        } catch (err) {
-          console.error("[recording] monitor toggle sync failed:", err);
-        }
-      })();
-      return;
-    }
 
     if (device.kind === "input") {
       set({
