@@ -6,10 +6,14 @@
   "type": "module",
   "scripts": {
     "dev": "vite",
-    "build": "tsc && vite build && electron-builder",
+    "build": "npm run backend:build && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "vite",
-    "typecheck": "tsc --noEmit"
+    "typecheck": "tsc --noEmit",
+    "backend:install": "npm install --prefix backend",
+    "backend:dev": "npm run dev --prefix backend",
+    "backend:build": "npm run build --prefix backend",
+    "postinstall": "npm run backend:install"
   },
   "dependencies": {
     "@radix-ui/react-dialog": "^1.1.15",
@@ -61,7 +65,10 @@
     },
     "files": [
       "dist/**/*",
-      "dist-electron/**/*"
+      "dist-electron/**/*",
+      "backend/dist/**/*",
+      "backend/package.json",
+      "backend/node_modules/**/*"
     ],
     "win": {
       "target": "nsis"

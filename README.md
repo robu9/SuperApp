@@ -42,24 +42,59 @@ Production build:
 npm run build
 ```
 
-## Mock backend
+## Backend (capture engine)
 
-Core interactions work with local mock state:
+SuperApp ships with a local capture engine in `backend/` that exposes a **Screenpipe-compatible REST API** on `http://127.0.0.1:3030`.
 
-- Chat sends messages and receives simulated AI replies
-- Recording status with device toggle, pause/resume, meeting notes
-- Timeline frame scrubber, pipe install/run, connection toggles
-- Settings persist to localStorage
+### What works today
 
-To connect a real capture engine, wire `electron/main.ts` IPC to your local API at `:3030`.
+- Event-driven-lite screen capture (deduped frames every ~2s)
+- Active window + app metadata (Windows/macOS)
+- OCR text extraction (Tesseract.js) with accessibility metadata fallback
+- SQLite storage + FTS5 full-text search
+- REST API: `/health`, `/search`, `/frames`, `/vision/list`, `/audio/list`, `/engine/*`
+- Electron auto-starts the engine on launch
+
+### Data directory
+
+Captured data is stored in `~/.superapp/` (frames, SQLite DB, audio).
+
+### Run backend standalone
+
+```bash
+npm run backend:install
+npm run backend:dev
+```
+
+### API examples
+
+```bash
+curl http://localhost:3030/health
+curl "http://localhost:3030/search?q=meeting&limit=10"
+curl http://localhost:3030/frames?limit=20
+```
+
+### Still to build (Screenpipe parity)
+
+- True event-driven capture (app switches, clicks, scroll)
+- Native accessibility tree extraction (UI Automation / AX API)
+- Local Whisper audio transcription + speaker diarization
+- Pipes automation runtime, MCP server, semantic/embedding search
+- Integrations (Slack, Notion, Obsidian, etc.)
+
+## Mock backend (legacy)
+
+Core UI interactions previously used local mock state. Search, timeline, recording status, and chat context now use the real backend when the engine is running.
 
 ## Project layout
 
 ```
-electron/          Main process + preload
+electron/          Main process + preload + backend manager
+backend/           Capture engine + Screenpipe-compatible API
 src/
   components/      UI primitives, sidebar, chat, sections
   pages/           Route pages
   lib/stores/      Zustand stores
+  lib/api/         Backend API client
   lib/hooks/       Theme, shortcuts
 ```

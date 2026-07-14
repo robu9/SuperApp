@@ -5,6 +5,16 @@ export interface ElectronAPI {
   openExternal: (url: string) => Promise<void>;
   getPlatform: () => Promise<NodeJS.Platform>;
   quit: () => Promise<void>;
+  getApiUrl: () => Promise<string>;
+  apiRequest: (method: string, path: string, body?: unknown) => Promise<unknown>;
+  engine: {
+    start: () => Promise<unknown>;
+    stop: () => Promise<unknown>;
+    pause: () => Promise<unknown>;
+    resume: () => Promise<unknown>;
+    status: () => Promise<unknown>;
+    health: () => Promise<unknown>;
+  };
   onThemeChanged: (callback: (theme: string) => void) => () => void;
 }
 

@@ -1,5 +1,6 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
+import { api } from "@/lib/api/client";
 
 export interface ChatMessage {
   id: string;
@@ -121,20 +122,33 @@ export async function simulateAssistantReply(
   sessionId: string,
   userMessage: string
 ): Promise<void> {
-  const { actions } = useChatStore.getState();
+  const { actions, sessions } = useChatStore.getState();
   actions.setStreaming(true);
 
-  await new Promise((r) => setTimeout(r, 800));
+  try {
+    const session = sessions[sessionId];
+    const history =
+      session?.messages
+        .filter((message) => message.id !== "welcome")
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        })) ?? [];
 
-  const responses = [
-    `i found context related to "${userMessage.slice(0, 40)}..." from your recent screen activity.`,
-    "here's a summary based on your captured timeline and meeting notes.",
-    "would you like me to dig deeper into a specific time range?",
-  ];
+    const res = await api.chat({
+      messages: [...history, { role: "user", content: userMessage }],
+      context_query: userMessage,
+    });
 
-  actions.addMessage(sessionId, {
-    role: "assistant",
-    content: responses.join("\n\n"),
-  });
-  actions.setStreaming(false);
+    actions.addMessage(sessionId, { role: "assistant", content: res.content });
+  } catch (err) {
+    const message =
+      err instanceof Error ? err.message : "failed to reach the ai backend";
+    actions.addMessage(sessionId, {
+      role: "assistant",
+      content: `sorry, i couldn't reach gemini right now.\n\n${message}`,
+    });
+  } finally {
+    actions.setStreaming(false);
+  }
 }

@@ -12,6 +12,18 @@ export default defineConfig({
       },
       preload: {
         input: "electron/preload.ts",
+        vite: {
+          build: {
+            rollupOptions: {
+              output: {
+                // package.json has "type": "module", so preload is emitted as .mjs
+                // and must use ESM — the default cjs+require build breaks in Electron.
+                format: "es",
+                entryFileNames: "preload.mjs",
+              },
+            },
+          },
+        },
       },
     }),
   ],

@@ -81,12 +81,29 @@ function PermissionsSlide({ onNext }: { onNext: () => void }) {
 }
 
 function EngineSlide({ onNext }: { onNext: () => void }) {
-  const [status, setStatus] = useState<"starting" | "ready" | "idle">("idle");
+  const [status, setStatus] = useState<"starting" | "ready" | "idle" | "error">("idle");
 
-  const start = () => {
+  const start = async () => {
     setStatus("starting");
-    setTimeout(() => setStatus("ready"), 2000);
+    try {
+      await electron?.engine.start();
+      const health = (await electron?.engine.health()) as { status?: string };
+      setStatus(health?.status === "healthy" ? "ready" : "error");
+    } catch {
+      setStatus("error");
+    }
   };
+
+  useEffect(() => {
+    void (async () => {
+      try {
+        const health = (await electron?.engine.health()) as { status?: string };
+        if (health?.status === "healthy") setStatus("ready");
+      } catch {
+        // engine not running yet
+      }
+    })();
+  }, []);
 
   return (
     <div className="flex flex-col min-h-screen p-8 gap-6">
@@ -99,7 +116,13 @@ function EngineSlide({ onNext }: { onNext: () => void }) {
           {status === "starting" ? "◐" : status === "ready" ? "●" : "○"}
         </div>
         <span className="text-xs font-mono uppercase tracking-wide text-muted-foreground">
-          {status === "starting" ? "starting..." : status === "ready" ? "engine ready" : "not started"}
+          {status === "starting"
+            ? "starting..."
+            : status === "ready"
+              ? "engine ready"
+              : status === "error"
+                ? "engine error"
+                : "not started"}
         </span>
         {status === "idle" && (
           <Button onClick={start}>start engine</Button>

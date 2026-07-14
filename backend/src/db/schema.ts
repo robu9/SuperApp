@@ -1,0 +1,67 @@
+export const SCHEMA_SQL = `
+PRAGMA journal_mode = WAL;
+PRAGMA foreign_keys = ON;
+
+CREATE TABLE IF NOT EXISTS frames (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT NOT NULL,
+  app_name TEXT,
+  window_name TEXT,
+  browser_url TEXT,
+  monitor_id INTEGER NOT NULL DEFAULT 0,
+  image_path TEXT NOT NULL,
+  focused INTEGER NOT NULL DEFAULT 1,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS ocr_text (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  frame_id INTEGER NOT NULL REFERENCES frames(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  text_length INTEGER NOT NULL,
+  confidence REAL DEFAULT 0
+);
+
+CREATE TABLE IF NOT EXISTS accessibility_text (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  frame_id INTEGER NOT NULL REFERENCES frames(id) ON DELETE CASCADE,
+  text TEXT NOT NULL,
+  text_length INTEGER NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS ui_elements (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  frame_id INTEGER NOT NULL REFERENCES frames(id) ON DELETE CASCADE,
+  element_type TEXT,
+  text TEXT,
+  bounds_json TEXT
+);
+
+CREATE TABLE IF NOT EXISTS audio_transcriptions (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  timestamp TEXT NOT NULL,
+  transcription TEXT NOT NULL,
+  file_path TEXT,
+  device_name TEXT,
+  duration_secs REAL,
+  speaker_id TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_frames_timestamp ON frames(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_frames_app ON frames(app_name);
+CREATE INDEX IF NOT EXISTS idx_ocr_frame ON ocr_text(frame_id);
+CREATE INDEX IF NOT EXISTS idx_ax_frame ON accessibility_text(frame_id);
+CREATE INDEX IF NOT EXISTS idx_audio_timestamp ON audio_transcriptions(timestamp DESC);
+
+CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
+  content,
+  content_type,
+  frame_id UNINDEXED,
+  audio_id UNINDEXED,
+  timestamp UNINDEXED,
+  app_name UNINDEXED,
+  window_name UNINDEXED,
+  tokenize='porter unicode61'
+);
+`;

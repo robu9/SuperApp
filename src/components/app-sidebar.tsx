@@ -4,6 +4,7 @@ import React, {
   useContext,
   useEffect,
   useLayoutEffect,
+  useMemo,
   useState,
 } from "react";
 import { createPortal } from "react-dom";
@@ -72,8 +73,19 @@ export function AppSidebarLayout({ children }: { children: React.ReactNode }) {
   useEffect(() => setHydrated(true), []);
 
   const setSlot = useCallback((next: SidebarSlot | null) => {
-    setSlotState(next);
+    setSlotState((prev) => {
+      if (prev?.className === next?.className && prev !== null && next !== null) {
+        return prev;
+      }
+      if (prev === next) return prev;
+      return next;
+    });
   }, []);
+
+  const shellValue = useMemo(
+    () => ({ container, setSlot }),
+    [container, setSlot]
+  );
 
   const beginResize = useCallback((e: React.PointerEvent) => {
     e.preventDefault();
@@ -102,7 +114,7 @@ export function AppSidebarLayout({ children }: { children: React.ReactNode }) {
   }, [width]);
 
   return (
-    <SidebarShellContext.Provider value={{ container, setSlot }}>
+    <SidebarShellContext.Provider value={shellValue}>
       <div
         className={cn(
           "flex h-screen min-h-0 overflow-hidden",
@@ -156,11 +168,13 @@ export function AppSidebar({
   className?: string;
 }) {
   const shell = useContext(SidebarShellContext);
+  const setSlot = shell?.setSlot;
 
   useIsomorphicLayoutEffect(() => {
-    shell?.setSlot({ className });
-    return () => shell?.setSlot(null);
-  }, [shell, className]);
+    if (!setSlot) return;
+    setSlot({ className });
+    return () => setSlot(null);
+  }, [setSlot, className]);
 
   if (!shell?.container) return null;
   return createPortal(children, shell.container);

@@ -2,30 +2,48 @@ import React, { useEffect, useState } from "react";
 import { Search, X } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { electron } from "@/lib/electron";
+import { api, type SearchResultItem } from "@/lib/api/client";
+import { formatDistanceToNow } from "date-fns";
 
-const MOCK_RESULTS = [
-  { id: "1", type: "screen", text: "project aurora timeline discussion", time: "10:42" },
-  { id: "2", type: "audio", text: "meeting notes about design system audit", time: "09:15" },
-  { id: "3", type: "ocr", text: "electron app architecture document", time: "yesterday" },
-  { id: "4", type: "chat", text: "summarize project updates from last meeting", time: "yesterday" },
-];
+function formatResultTime(timestamp: string): string {
+  try {
+    return formatDistanceToNow(new Date(timestamp), { addSuffix: true });
+  } catch {
+    return timestamp;
+  }
+}
+
+function resultType(item: SearchResultItem): string {
+  return item.type.toLowerCase();
+}
 
 export function SearchPage() {
   const [query, setQuery] = useState("");
-  const [results, setResults] = useState<typeof MOCK_RESULTS>([]);
+  const [results, setResults] = useState<SearchResultItem[]>([]);
+  const [loading, setLoading] = useState(false);
 
   useEffect(() => {
     if (!query.trim()) {
       setResults([]);
       return;
     }
-    const timer = setTimeout(() => {
-      setResults(
-        MOCK_RESULTS.filter((r) =>
-          r.text.toLowerCase().includes(query.toLowerCase())
-        )
-      );
-    }, 200);
+
+    const timer = setTimeout(async () => {
+      setLoading(true);
+      try {
+        const res = await api.search({
+          q: query,
+          limit: 30,
+          content_type: "all",
+        });
+        setResults(res.data);
+      } catch {
+        setResults([]);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
     return () => clearTimeout(timer);
   }, [query]);
 
@@ -57,24 +75,38 @@ export function SearchPage() {
           </button>
         </div>
         <div className="max-h-80 overflow-y-auto scrollbar-minimal">
-          {results.length === 0 && query && (
+          {loading && (
+            <div className="p-6 text-sm text-muted-foreground font-mono lowercase">
+              searching...
+            </div>
+          )}
+          {!loading && results.length === 0 && query && (
             <div className="p-6 text-sm text-muted-foreground font-mono lowercase">
               no results for "{query}"
             </div>
           )}
-          {results.map((r) => (
+          {results.map((r, i) => (
             <button
-              key={r.id}
-              className="w-full px-4 py-3 border-b border-border text-left hover:bg-accent transition-colors duration-150 flex justify-between items-center"
+              key={`${r.content.frame_id ?? r.content.audio_chunk_id ?? i}`}
+              className="w-full px-4 py-3 border-b border-border text-left hover:bg-accent transition-colors duration-150 flex justify-between items-center gap-4"
             >
-              <div>
+              <div className="min-w-0">
                 <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground mr-2">
-                  {r.type}
+                  {resultType(r)}
                 </span>
-                <span className="font-mono text-sm lowercase">{r.text}</span>
+                <span className="font-mono text-sm lowercase truncate block">
+                  {r.content.text.slice(0, 120)}
+                  {r.content.text.length > 120 ? "…" : ""}
+                </span>
+                {r.content.app_name && (
+                  <span className="text-[10px] text-muted-foreground font-mono block mt-1">
+                    {r.content.app_name}
+                    {r.content.window_name ? ` · ${r.content.window_name}` : ""}
+                  </span>
+                )}
               </div>
-              <span className="text-[10px] text-muted-foreground font-mono tabular-nums">
-                {r.time}
+              <span className="text-[10px] text-muted-foreground font-mono tabular-nums shrink-0">
+                {formatResultTime(r.content.timestamp)}
               </span>
             </button>
           ))}

@@ -1,34 +1,129 @@
-import React, { useState } from "react";
+import React, { useEffect, useState } from "react";
 import { ChevronLeft, ChevronRight, Play } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
+import { api, type FrameRow } from "@/lib/api/client";
+import { format } from "date-fns";
 
-const MOCK_FRAMES = Array.from({ length: 24 }, (_, i) => ({
-  id: i,
-  time: `${String(10 + Math.floor(i / 6)).padStart(2, "0")}:${String((i * 5) % 60).padStart(2, "0")}`,
-  label: `frame ${i + 1}`,
-}));
+function formatFrameTime(timestamp: string): string {
+  try {
+    return format(new Date(timestamp), "HH:mm");
+  } catch {
+    return timestamp;
+  }
+}
 
 export function TimelineSection() {
+  const [frames, setFrames] = useState<FrameRow[]>([]);
   const [current, setCurrent] = useState(0);
+  const [frameText, setFrameText] = useState("");
+  const [imageSrc, setImageSrc] = useState<string | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function loadFrames() {
+      try {
+        const res = await api.frames({ limit: 100 });
+        setFrames(res.data.reverse());
+      } catch {
+        setFrames([]);
+      } finally {
+        setLoading(false);
+      }
+    }
+    void loadFrames();
+    const interval = setInterval(() => void loadFrames(), 5000);
+    return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    if (frames.length === 0) return;
+    const frame = frames[current];
+    if (!frame) return;
+
+    async function loadFrameDetail() {
+      try {
+        const [textRes, imageRes] = await Promise.all([
+          api.frameText(frame.id),
+          api.frameImage(frame.id),
+        ]);
+        setFrameText(textRes.text || "no text captured");
+        if (imageRes.image_base64) {
+          setImageSrc(`data:image/jpeg;base64,${imageRes.image_base64}`);
+        } else {
+          setImageSrc(null);
+        }
+      } catch {
+        setFrameText("failed to load frame");
+        setImageSrc(null);
+      }
+    }
+
+    void loadFrameDetail();
+  }, [frames, current]);
+
+  if (loading) {
+    return (
+      <div className="flex flex-col h-full min-h-0">
+        <div className="px-8 py-6 border-b border-border">
+          <h1 className="text-2xl font-mono lowercase">timeline</h1>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-muted-foreground font-mono text-sm">
+          loading frames...
+        </div>
+      </div>
+    );
+  }
+
+  if (frames.length === 0) {
+    return (
+      <div className="flex flex-col h-full min-h-0">
+        <div className="px-8 py-6 border-b border-border">
+          <h1 className="text-2xl font-mono lowercase">timeline</h1>
+          <p className="text-sm text-muted-foreground font-mono mt-1">
+            browse your screen history
+          </p>
+        </div>
+        <div className="flex-1 flex items-center justify-center text-muted-foreground font-mono text-sm lowercase">
+          no frames captured yet — recording will populate this view
+        </div>
+      </div>
+    );
+  }
+
+  const frame = frames[current];
 
   return (
     <div className="flex flex-col h-full min-h-0">
       <div className="px-8 py-6 border-b border-border">
         <h1 className="text-2xl font-mono lowercase">timeline</h1>
         <p className="text-sm text-muted-foreground font-mono mt-1">
-          browse your screen history
+          browse your screen history · {frames.length} frames
         </p>
       </div>
       <div className="flex-1 flex flex-col min-h-0 p-6 gap-4">
-        <div className="flex-1 border border-border bg-surface flex items-center justify-center relative min-h-[300px]">
-          <div className="text-center">
-            <div className="text-6xl font-mono text-muted-foreground/30 mb-4">▦</div>
-            <p className="text-sm font-mono text-muted-foreground lowercase">
-              {MOCK_FRAMES[current].label} — {MOCK_FRAMES[current].time}
+        <div className="flex-1 border border-border bg-surface flex items-center justify-center relative min-h-[300px] overflow-hidden">
+          {imageSrc ? (
+            <img
+              src={imageSrc}
+              alt={`frame ${frame.id}`}
+              className="max-w-full max-h-full object-contain"
+            />
+          ) : (
+            <div className="text-center">
+              <div className="text-6xl font-mono text-muted-foreground/30 mb-4">▦</div>
+              <p className="text-sm font-mono text-muted-foreground lowercase">
+                frame {frame.id} — {formatFrameTime(frame.timestamp)}
+              </p>
+            </div>
+          )}
+          <div className="absolute bottom-0 left-0 right-0 bg-background/90 border-t border-border p-3">
+            <p className="text-xs font-mono text-muted-foreground lowercase line-clamp-2">
+              {frame.app_name && <span className="mr-2">{frame.app_name}</span>}
+              {frameText}
             </p>
           </div>
-          <div className="absolute bottom-4 left-4 right-4 flex items-center gap-3">
+          <div className="absolute bottom-16 left-4 right-4 flex items-center gap-3">
             <Button
               variant="outline"
               size="icon"
@@ -40,14 +135,14 @@ export function TimelineSection() {
             <div className="flex-1 h-1 bg-border relative">
               <div
                 className="absolute top-0 left-0 h-full bg-foreground transition-all duration-150"
-                style={{ width: `${((current + 1) / MOCK_FRAMES.length) * 100}%` }}
+                style={{ width: `${((current + 1) / frames.length) * 100}%` }}
               />
             </div>
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setCurrent((c) => Math.min(MOCK_FRAMES.length - 1, c + 1))}
-              disabled={current === MOCK_FRAMES.length - 1}
+              onClick={() => setCurrent((c) => Math.min(frames.length - 1, c + 1))}
+              disabled={current === frames.length - 1}
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
@@ -57,9 +152,9 @@ export function TimelineSection() {
           </div>
         </div>
         <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-2">
-          {MOCK_FRAMES.map((frame, i) => (
+          {frames.map((f, i) => (
             <button
-              key={frame.id}
+              key={f.id}
               onClick={() => setCurrent(i)}
               className={cn(
                 "flex-shrink-0 w-20 h-14 border font-mono text-[10px] lowercase transition-all duration-150",
@@ -68,7 +163,7 @@ export function TimelineSection() {
                   : "border-border text-muted-foreground hover:border-foreground"
               )}
             >
-              {frame.time}
+              {formatFrameTime(f.timestamp)}
             </button>
           ))}
         </div>

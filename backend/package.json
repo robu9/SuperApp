@@ -1,0 +1,33 @@
+{
+  "name": "superapp-backend",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "SuperApp capture engine — Screenpipe-compatible local API",
+  "main": "dist/index.js",
+  "scripts": {
+    "dev": "tsx watch src/index.ts",
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "typecheck": "tsc --noEmit"
+  },
+  "dependencies": {
+    "@ffmpeg-installer/ffmpeg": "^1.1.0",
+    "@hono/node-server": "^1.14.4",
+    "hono": "^4.7.10",
+    "screenshot-desktop": "^1.15.1",
+    "sharp": "^0.33.5",
+    "tesseract.js": "^6.0.1"
+  },
+  "devDependencies": {
+    "@types/node": "^20.19.37",
+    "@types/screenshot-desktop": "^1.12.3",
+    "tsx": "^4.19.4",
+    "typescript": "^5.9.3"
+  },
+  "allowScripts": {
+    "esbuild@0.28.1": true,
+    "sharp@0.33.5": true,
+    "tesseract.js@6.0.1": true
+  }
+}

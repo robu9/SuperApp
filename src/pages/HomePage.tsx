@@ -63,12 +63,14 @@ export function HomePage() {
   const { isTranslucent } = useSidebarContext();
   const disableTimeline = useSettingsStore((s) => s.settings.disableTimeline);
   const tick = useRecordingStore((s) => s.tick);
+  const syncFromBackend = useRecordingStore((s) => s.syncFromBackend);
   const { createSession } = useChatStore((s) => s.actions);
 
   useEffect(() => {
-    const id = setInterval(tick, 1000);
+    void syncFromBackend();
+    const id = setInterval(tick, 3000);
     return () => clearInterval(id);
-  }, [tick]);
+  }, [tick, syncFromBackend]);
 
   useEffect(() => {
     if (SETTINGS_SECTIONS.has(section)) {

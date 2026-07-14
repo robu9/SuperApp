@@ -215,8 +215,8 @@ function SectionContent({ section }: { section: SettingsSection }) {
         )}
         {section === "ai" && (
           <>
-            <SettingRow label="default model" description="local llm">
-              <span className="text-sm font-mono text-muted-foreground">llama 3.2</span>
+            <SettingRow label="default model" description="google gemini">
+              <span className="text-sm font-mono text-muted-foreground">gemini-2.5-flash</span>
             </SettingRow>
             <SettingRow label="cloud fallback" description="use cloud when local unavailable">
               <Toggle checked={false} onChange={() => {}} />

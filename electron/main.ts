@@ -1,6 +1,12 @@
 import { app, BrowserWindow, ipcMain, shell } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
+import {
+  getApiUrl,
+  proxyApi,
+  startBackend,
+  stopBackend,
+} from "./backend-manager.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
@@ -79,7 +85,14 @@ function getOrCreateWindow(kind: WindowKind): BrowserWindow {
   return createWindow(kind);
 }
 
-app.whenReady().then(() => {
+app.whenReady().then(async () => {
+  try {
+    await startBackend();
+    console.log(`[main] backend ready at ${getApiUrl()}`);
+  } catch (err) {
+    console.error("[main] backend failed to start:", err);
+  }
+
   const onboardingComplete = true; // checked via renderer store; default to home for dev
   if (onboardingComplete) {
     getOrCreateWindow("home");
@@ -92,6 +105,10 @@ app.whenReady().then(() => {
       getOrCreateWindow("home");
     }
   });
+});
+
+app.on("before-quit", () => {
+  stopBackend();
 });
 
 app.on("window-all-closed", () => {
@@ -123,3 +140,16 @@ ipcMain.handle("app:get-platform", () => process.platform);
 ipcMain.handle("app:quit", () => {
   app.quit();
 });
+
+ipcMain.handle("api:get-url", () => getApiUrl());
+
+ipcMain.handle("api:request", async (_event, method: string, path: string, body?: unknown) => {
+  return proxyApi(method, path, body);
+});
+
+ipcMain.handle("engine:start", async () => proxyApi("POST", "/engine/start"));
+ipcMain.handle("engine:stop", async () => proxyApi("POST", "/engine/stop"));
+ipcMain.handle("engine:pause", async () => proxyApi("POST", "/engine/pause"));
+ipcMain.handle("engine:resume", async () => proxyApi("POST", "/engine/resume"));
+ipcMain.handle("engine:status", async () => proxyApi("GET", "/engine/status"));
+ipcMain.handle("engine:health", async () => proxyApi("GET", "/health"));
