@@ -15,7 +15,7 @@ import {
   getActivitySummary,
   getFrameById,
   getFrameText,
-  getRecentScreenContext,
+  getRecentContext,
   getStats,
   initDatabase,
   keywordSearch,
@@ -236,10 +236,12 @@ app.post("/chat", async (c) => {
     const stats = getStats();
     const engine = captureEngine.state;
 
-    // Always include recent screen context (fixes "hi" returning no context)
-    const recent = getRecentScreenContext(10);
+    // Always include recent screen + audio context (not keyword-dependent)
+    const recent = getRecentContext(12);
     const contextSnippets: string[] = recent.map((item) => {
+      const sourceLabel = item.source === "audio" ? "[audio]" : "[screen]";
       const parts = [
+        sourceLabel,
         item.app_name ? `[${item.app_name}]` : null,
         item.window_name ? `"${item.window_name}"` : null,
         item.text,

@@ -26,26 +26,28 @@ function buildSystemInstruction(
   contextSnippets: string[],
   recording: RecordingStatus
 ): string {
+  const hasHistory = contextSnippets.length > 0;
   const statusLines = [
     `Screen recording: ${recording.screenRecording ? "active" : "paused/off"} (${recording.framesCaptured} frames captured)`,
     `Audio recording: ${recording.audioRecording ? "active" : "off"} (${recording.audioChunks} transcriptions stored)`,
+    `Captured history available: ${hasHistory ? "yes" : "no"}`,
   ].join("\n");
 
-  const contextBlock =
-    contextSnippets.length > 0
-      ? `\n\nRecent screen & audio history from the user's machine:\n${contextSnippets
-          .slice(0, 12)
-          .map((snippet, i) => `${i + 1}. ${snippet.slice(0, 600)}`)
-          .join("\n")}`
-      : recording.framesCaptured > 0
-        ? "\n\nScreen frames exist in the database but no readable text was extracted from recent captures."
-        : "\n\nNo screen history is available yet — the capture engine may have just started.";
+  const contextBlock = hasHistory
+    ? `\n\nRecent screen & audio history from the user's machine (you CAN use this to answer — it is real captured data, even if live recording is currently paused):\n${contextSnippets
+        .slice(0, 12)
+        .map((snippet, i) => `${i + 1}. ${snippet.slice(0, 600)}`)
+        .join("\n")}`
+    : recording.framesCaptured > 0
+      ? "\n\nScreen frames exist in the database but no readable text was extracted from recent captures."
+      : "\n\nNo screen history is available yet — the capture engine may have just started.";
 
   return [
     "You are SuperApp, a helpful AI assistant inside a desktop app that records the user's screen and audio locally.",
     "Answer clearly and concisely. Use lowercase, friendly tone unless the user prefers otherwise.",
-    "When screen-history context is provided below, use it to give specific, grounded answers about what the user was doing.",
-    "IMPORTANT: Trust the recording status below. If screen recording is active and frames exist, do NOT tell the user recording is disabled.",
+    "When screen/audio history is provided below, you HAVE seen and heard that content — use it to give specific, grounded answers about what the user was doing.",
+    "Do NOT say you cannot see or hear the user when captured history is provided below. Distinguish between live recording status (paused/active) and historical context you already have.",
+    "If the user asks whether you have seen or heard something, check the history below first and answer based on that data.",
     `Current recording status:\n${statusLines}`,
     contextBlock,
   ].join("");

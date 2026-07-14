@@ -1,5 +1,5 @@
-import React, { useEffect, useState } from "react";
-import { ChevronLeft, ChevronRight, Play } from "lucide-react";
+import React, { useEffect, useRef, useState } from "react";
+import { ChevronLeft, ChevronRight } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { api, type FrameRow } from "@/lib/api/client";
@@ -19,18 +19,39 @@ export function TimelineSection() {
   const [frameText, setFrameText] = useState("");
   const [imageSrc, setImageSrc] = useState<string | null>(null);
   const [loading, setLoading] = useState(true);
+  const followLatestRef = useRef(true);
+  const thumbStripRef = useRef<HTMLDivElement>(null);
+  const currentRef = useRef(0);
+  currentRef.current = current;
 
   useEffect(() => {
     async function loadFrames() {
       try {
         const res = await api.frames({ limit: 100 });
-        setFrames(res.data.reverse());
+        const ordered = res.data.reverse();
+
+        setFrames((prev) => {
+          const wasFollowing =
+            followLatestRef.current ||
+            prev.length === 0 ||
+            currentRef.current >= prev.length - 1;
+
+          if (wasFollowing && ordered.length > 0) {
+            setCurrent(ordered.length - 1);
+            followLatestRef.current = true;
+          } else if (ordered.length > 0) {
+            setCurrent((c) => Math.min(c, ordered.length - 1));
+          }
+
+          return ordered;
+        });
       } catch {
         setFrames([]);
       } finally {
         setLoading(false);
       }
     }
+
     void loadFrames();
     const interval = setInterval(() => void loadFrames(), 5000);
     return () => clearInterval(interval);
@@ -62,6 +83,24 @@ export function TimelineSection() {
     void loadFrameDetail();
   }, [frames, current]);
 
+  useEffect(() => {
+    const strip = thumbStripRef.current;
+    if (!strip) return;
+    const active = strip.querySelector<HTMLElement>('[data-active="true"]');
+    active?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+  }, [current, frames.length]);
+
+  const goToFrame = (index: number) => {
+    followLatestRef.current = index >= frames.length - 1;
+    setCurrent(index);
+  };
+
+  const goToLatest = () => {
+    if (frames.length === 0) return;
+    followLatestRef.current = true;
+    setCurrent(frames.length - 1);
+  };
+
   if (loading) {
     return (
       <div className="flex flex-col h-full min-h-0">
@@ -92,14 +131,23 @@ export function TimelineSection() {
   }
 
   const frame = frames[current];
+  const atLatest = current === frames.length - 1;
 
   return (
     <div className="flex flex-col h-full min-h-0">
-      <div className="px-8 py-6 border-b border-border">
-        <h1 className="text-2xl font-mono lowercase">timeline</h1>
-        <p className="text-sm text-muted-foreground font-mono mt-1">
-          browse your screen history · {frames.length} frames
-        </p>
+      <div className="px-8 py-6 border-b border-border flex items-center justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-mono lowercase">timeline</h1>
+          <p className="text-sm text-muted-foreground font-mono mt-1">
+            browse your screen history · {frames.length} frames
+            {followLatestRef.current && atLatest ? " · live" : ""}
+          </p>
+        </div>
+        {!atLatest && (
+          <Button variant="outline" size="sm" onClick={goToLatest} className="font-mono text-xs lowercase">
+            jump to latest
+          </Button>
+        )}
       </div>
       <div className="flex-1 flex flex-col min-h-0 p-6 gap-4">
         <div className="flex-1 border border-border bg-surface flex items-center justify-center relative min-h-[300px] overflow-hidden">
@@ -127,7 +175,7 @@ export function TimelineSection() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setCurrent((c) => Math.max(0, c - 1))}
+              onClick={() => goToFrame(Math.max(0, current - 1))}
               disabled={current === 0}
             >
               <ChevronLeft className="w-4 h-4" />
@@ -141,26 +189,25 @@ export function TimelineSection() {
             <Button
               variant="outline"
               size="icon"
-              onClick={() => setCurrent((c) => Math.min(frames.length - 1, c + 1))}
-              disabled={current === frames.length - 1}
+              onClick={() => goToFrame(Math.min(frames.length - 1, current + 1))}
+              disabled={atLatest}
             >
               <ChevronRight className="w-4 h-4" />
             </Button>
-            <Button variant="outline" size="icon">
-              <Play className="w-4 h-4" />
-            </Button>
           </div>
         </div>
-        <div className="flex gap-1 overflow-x-auto scrollbar-hide pb-2">
+        <div ref={thumbStripRef} className="flex gap-1 overflow-x-auto scrollbar-hide pb-2">
           {frames.map((f, i) => (
             <button
               key={f.id}
-              onClick={() => setCurrent(i)}
+              data-active={i === current ? "true" : "false"}
+              onClick={() => goToFrame(i)}
               className={cn(
                 "flex-shrink-0 w-20 h-14 border font-mono text-[10px] lowercase transition-all duration-150",
                 i === current
                   ? "border-foreground bg-foreground text-background"
-                  : "border-border text-muted-foreground hover:border-foreground"
+                  : "border-border text-muted-foreground hover:border-foreground",
+                i === frames.length - 1 && followLatestRef.current && "ring-1 ring-foreground/40"
               )}
             >
               {formatFrameTime(f.timestamp)}

@@ -338,6 +338,7 @@ export interface RecentContextItem {
   app_name: string | null;
   window_name: string | null;
   text: string;
+  source: "screen" | "audio";
 }
 
 /** Latest captured screen text for chat context (not keyword-dependent). */
@@ -355,9 +356,34 @@ export function getRecentScreenContext(limit = 10): RecentContextItem[] {
        ORDER BY f.timestamp DESC
        LIMIT ?`
     )
-    .all(limit) as RecentContextItem[];
+    .all(limit) as Array<Omit<RecentContextItem, "source">>;
 
-  return rows.filter((row) => row.text?.trim().length > 0);
+  return rows
+    .filter((row) => row.text?.trim().length > 0)
+    .map((row) => ({ ...row, source: "screen" as const }));
+}
+
+/** Latest audio transcriptions for chat context. */
+export function getRecentAudioContext(limit = 5): RecentContextItem[] {
+  const rows = getDb()
+    .prepare(
+      `SELECT timestamp, NULL as app_name, NULL as window_name, transcription as text
+       FROM audio_transcriptions
+       WHERE length(trim(transcription)) > 0
+       ORDER BY timestamp DESC
+       LIMIT ?`
+    )
+    .all(limit) as Array<Omit<RecentContextItem, "source">>;
+
+  return rows.map((row) => ({ ...row, source: "audio" as const }));
+}
+
+/** Merged recent screen + audio context, newest first. */
+export function getRecentContext(limit = 12): RecentContextItem[] {
+  const combined = [...getRecentScreenContext(limit), ...getRecentAudioContext(5)];
+  return combined
+    .sort((a, b) => new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime())
+    .slice(0, limit);
 }
 
 export function getStats(): {

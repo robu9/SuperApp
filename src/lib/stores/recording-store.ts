@@ -35,13 +35,47 @@ function monitorsToDevices(monitors: MonitorInfo[]): RecordingDevice[] {
   }));
 }
 
-function audioToDevices(audio: AudioDeviceInfo[]): RecordingDevice[] {
+function audioToDevices(
+  audio: AudioDeviceInfo[],
+  audioRecording: boolean
+): RecordingDevice[] {
   return audio.map((d, i) => ({
     name: d.name.toLowerCase(),
     fullName: `audio-${d.device_type}-${i}`,
     kind: d.device_type === "input" ? "input" : "output",
-    active: true,
+    active: d.device_type === "input" ? audioRecording : true,
   }));
+}
+
+function mergeDevices(
+  monitors: MonitorInfo[],
+  audio: AudioDeviceInfo[],
+  status: { paused: boolean; audioRecording: boolean },
+  previous: RecordingDevice[]
+): RecordingDevice[] {
+  const previousActive = new Map(previous.map((d) => [d.fullName, d.active]));
+
+  const next = [
+    ...monitorsToDevices(monitors),
+    ...audioToDevices(audio, status.audioRecording),
+  ];
+
+  if (next.length === 0) return previous;
+
+  return next.map((device) => {
+    if (device.kind === "monitor") {
+      if (status.paused) return { ...device, active: false };
+      const wasActive = previousActive.get(device.fullName);
+      return { ...device, active: wasActive ?? device.active };
+    }
+
+    if (device.kind === "input") {
+      return { ...device, active: status.audioRecording };
+    }
+
+    const wasActive = previousActive.get(device.fullName);
+    return { ...device, active: wasActive ?? true };
+  });
 }
 
 export const useRecordingStore = create<RecordingState>((set, get) => ({
@@ -61,13 +95,15 @@ export const useRecordingStore = create<RecordingState>((set, get) => ({
         api.engineStatus(),
       ]);
 
-      const devices = [
-        ...monitorsToDevices(vision.data),
-        ...audioToDevices(audio.data),
-      ];
+      const devices = mergeDevices(
+        vision.data,
+        audio.data,
+        { paused: status.paused, audioRecording: status.audioRecording },
+        get().devices
+      );
 
       set({
-        devices: devices.length > 0 ? devices : get().devices,
+        devices,
         isConnected: true,
         isGloballyPaused: status.paused,
         meetingActive: status.audioRecording,

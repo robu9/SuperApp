@@ -39,12 +39,15 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
   } = useRecordingStore();
 
   const pausedCount = devices.filter((d) => !d.active).length;
+  const isPaused = isGloballyPaused || pausedCount > 0;
   const summary =
     devices.length === 0
       ? "not recording"
-      : pausedCount === 0
-        ? "recording"
-        : `${pausedCount} device${pausedCount > 1 ? "s" : ""} paused`;
+      : isGloballyPaused
+        ? "paused"
+        : pausedCount === 0
+          ? "recording"
+          : `${pausedCount} device${pausedCount > 1 ? "s" : ""} paused`;
   const label = meetingActive ? `${summary} · meeting notes` : summary;
 
   return (
@@ -63,9 +66,9 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
           <span
             className={cn(
               "w-2 h-2 border border-current",
-              meetingActive && "animate-pulse",
-              pausedCount > 0 && !meetingActive && "bg-transparent",
-              pausedCount === 0 && "bg-current"
+              meetingActive && !isPaused && "animate-pulse",
+              isPaused && !meetingActive && "bg-transparent",
+              !isPaused && "bg-current"
             )}
           />
           <span>{label}</span>
