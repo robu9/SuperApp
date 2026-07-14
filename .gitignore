@@ -1,0 +1,10 @@
+node_modules/
+screenpipe-main/
+dist-types/
+dist/
+dist-electron/
+release/
+.aidesigner/runs/
+*.log
+.DS_Store
+Thumbs.db

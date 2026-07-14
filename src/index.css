@@ -1,0 +1,176 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --background: 0 0% 100%;
+    --foreground: 0 0% 0%;
+    --surface: 0 0% 96%;
+    --surface-secondary: 0 0% 93%;
+    --surface-tertiary: 0 0% 90%;
+    --card: 0 0% 100%;
+    --card-foreground: 0 0% 0%;
+    --card-hover: 0 0% 0%;
+    --popover: 0 0% 100%;
+    --popover-foreground: 0 0% 0%;
+    --primary: 0 0% 0%;
+    --primary-foreground: 0 0% 100%;
+    --primary-hover: 0 0% 20%;
+    --primary-muted: 0 0% 90%;
+    --secondary: 0 0% 96%;
+    --secondary-foreground: 0 0% 0%;
+    --secondary-hover: 0 0% 90%;
+    --destructive: 0 0% 0%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-hover: 0 0% 20%;
+    --destructive-muted: 0 0% 90%;
+    --muted: 0 0% 96%;
+    --muted-foreground: 0 0% 40%;
+    --accent: 0 0% 96%;
+    --accent-foreground: 0 0% 0%;
+    --accent-hover: 0 0% 90%;
+    --border: 0 0% 80%;
+    --input: 0 0% 100%;
+    --input-focus: 0 0% 0%;
+    --ring: 0 0% 0%;
+    --text-primary: 0 0% 0%;
+    --text-secondary: 0 0% 40%;
+    --text-tertiary: 0 0% 60%;
+    --text-disabled: 0 0% 70%;
+    --sidebar-background: 0 0% 98%;
+    --sidebar-foreground: 0 0% 0%;
+    --sidebar-primary: 0 0% 0%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 0 0% 96%;
+    --sidebar-accent-foreground: 0 0% 0%;
+    --sidebar-border: 0 0% 80%;
+    --sidebar-ring: 0 0% 0%;
+    --radius: 0;
+    --font-size-base: 16px;
+    --text-xs: calc(var(--font-size-base) * 0.75);
+    --text-sm: calc(var(--font-size-base) * 0.875);
+    --text-base: var(--font-size-base);
+    --text-lg: calc(var(--font-size-base) * 1.125);
+    --text-xl: calc(var(--font-size-base) * 1.25);
+    --text-2xl: calc(var(--font-size-base) * 1.5);
+    --text-3xl: calc(var(--font-size-base) * 1.875);
+    --text-4xl: calc(var(--font-size-base) * 2.25);
+  }
+
+  .dark {
+    color-scheme: dark;
+    --background: 0 0% 7%;
+    --foreground: 0 0% 100%;
+    --surface: 0 0% 10%;
+    --surface-secondary: 0 0% 13%;
+    --surface-tertiary: 0 0% 16%;
+    --card: 0 0% 9%;
+    --card-foreground: 0 0% 100%;
+    --card-hover: 0 0% 100%;
+    --popover: 0 0% 10%;
+    --popover-foreground: 0 0% 100%;
+    --primary: 0 0% 100%;
+    --primary-foreground: 0 0% 0%;
+    --primary-hover: 0 0% 80%;
+    --primary-muted: 0 0% 15%;
+    --secondary: 0 0% 14%;
+    --secondary-foreground: 0 0% 100%;
+    --secondary-hover: 0 0% 18%;
+    --destructive: 0 0% 100%;
+    --destructive-foreground: 0 0% 0%;
+    --destructive-hover: 0 0% 80%;
+    --destructive-muted: 0 0% 15%;
+    --muted: 0 0% 14%;
+    --muted-foreground: 0 0% 75%;
+    --accent: 0 0% 14%;
+    --accent-foreground: 0 0% 100%;
+    --accent-hover: 0 0% 18%;
+    --border: 0 0% 22%;
+    --input: 0 0% 10%;
+    --input-focus: 0 0% 100%;
+    --ring: 0 0% 100%;
+    --text-primary: 0 0% 100%;
+    --text-secondary: 0 0% 60%;
+    --text-tertiary: 0 0% 40%;
+    --text-disabled: 0 0% 30%;
+    --sidebar-background: 0 0% 5%;
+    --sidebar-foreground: 0 0% 100%;
+    --sidebar-primary: 0 0% 100%;
+    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-accent: 0 0% 14%;
+    --sidebar-accent-foreground: 0 0% 100%;
+    --sidebar-border: 0 0% 22%;
+    --sidebar-ring: 0 0% 100%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  html {
+    background-color: hsl(var(--background));
+  }
+
+  body {
+    @apply bg-background text-foreground font-mono;
+    margin: 0;
+    overflow: hidden;
+  }
+
+  html, body {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+
+  *, button, a {
+    user-select: none;
+    -webkit-user-drag: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  input, textarea, [contenteditable] {
+    user-select: text !important;
+  }
+
+  .prose, .prose * {
+    user-select: text !important;
+    cursor: text !important;
+  }
+
+  .prose::selection, .prose *::selection {
+    background-color: rgba(59, 130, 246, 0.35) !important;
+  }
+
+  .scrollbar-hide {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+  .scrollbar-hide::-webkit-scrollbar {
+    display: none;
+  }
+
+  .scrollbar-minimal {
+    scrollbar-width: thin;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.5) transparent;
+  }
+  .scrollbar-minimal::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  .scrollbar-minimal::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted-foreground) / 0.4);
+    border-radius: 4px;
+  }
+
+  .vibrant-sidebar {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+    border-color: transparent;
+  }
+  .dark .vibrant-sidebar {
+    background-color: rgba(255, 255, 255, 0.06) !important;
+  }
+}

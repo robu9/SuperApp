@@ -1,0 +1,167 @@
+import React, {
+  createContext,
+  useCallback,
+  useContext,
+  useEffect,
+  useLayoutEffect,
+  useState,
+} from "react";
+import { createPortal } from "react-dom";
+import { cn } from "@/lib/utils";
+import { useSettingsStore } from "@/lib/stores/settings-store";
+
+const useIsomorphicLayoutEffect =
+  typeof window !== "undefined" ? useLayoutEffect : useEffect;
+
+interface SidebarContextValue {
+  isTranslucent: boolean;
+}
+
+const SidebarContext = createContext<SidebarContextValue>({ isTranslucent: false });
+
+export function useSidebarContext() {
+  return useContext(SidebarContext);
+}
+
+export function SidebarProvider({ children }: { children: React.ReactNode }) {
+  const translucentSidebar = useSettingsStore((s) => s.settings.translucentSidebar);
+  const isTranslucent = translucentSidebar !== false;
+
+  useEffect(() => {
+    if (isTranslucent) {
+      document.documentElement.classList.add("macos-vibrancy");
+      document.body.classList.add("macos-vibrancy");
+      return () => {
+        document.documentElement.classList.remove("macos-vibrancy");
+        document.body.classList.remove("macos-vibrancy");
+      };
+    }
+  }, [isTranslucent]);
+
+  return (
+    <SidebarContext.Provider value={{ isTranslucent }}>{children}</SidebarContext.Provider>
+  );
+}
+
+const DEFAULT_WIDTH = 240;
+const MIN_WIDTH = 180;
+const MAX_WIDTH = 400;
+
+interface SidebarSlot {
+  className?: string;
+}
+
+interface SidebarShellContextValue {
+  container: HTMLDivElement | null;
+  setSlot: (slot: SidebarSlot | null) => void;
+}
+
+const SidebarShellContext = createContext<SidebarShellContextValue | null>(null);
+
+export function AppSidebarLayout({ children }: { children: React.ReactNode }) {
+  const { isTranslucent } = useSidebarContext();
+  const [width, setWidth] = useState(() => {
+    const stored = localStorage.getItem("superapp-sidebar-width");
+    return stored ? Number(stored) : DEFAULT_WIDTH;
+  });
+  const [isResizing, setIsResizing] = useState(false);
+  const [hydrated, setHydrated] = useState(false);
+  const [slot, setSlotState] = useState<SidebarSlot | null>(null);
+  const [container, setContainer] = useState<HTMLDivElement | null>(null);
+
+  useEffect(() => setHydrated(true), []);
+
+  const setSlot = useCallback((next: SidebarSlot | null) => {
+    setSlotState(next);
+  }, []);
+
+  const beginResize = useCallback((e: React.PointerEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+    const startX = e.clientX;
+    const startWidth = width;
+
+    const onMove = (ev: PointerEvent) => {
+      const next = Math.min(MAX_WIDTH, Math.max(MIN_WIDTH, startWidth + ev.clientX - startX));
+      setWidth(next);
+    };
+    const onUp = () => {
+      setIsResizing(false);
+      document.removeEventListener("pointermove", onMove);
+      document.removeEventListener("pointerup", onUp);
+      const stored = localStorage.getItem("superapp-sidebar-width");
+      const finalWidth = stored ? Number(stored) : width;
+      localStorage.setItem("superapp-sidebar-width", String(finalWidth));
+    };
+    document.addEventListener("pointermove", onMove);
+    document.addEventListener("pointerup", onUp);
+  }, [width]);
+
+  useEffect(() => {
+    localStorage.setItem("superapp-sidebar-width", String(width));
+  }, [width]);
+
+  return (
+    <SidebarShellContext.Provider value={{ container, setSlot }}>
+      <div
+        className={cn(
+          "flex h-screen min-h-0 overflow-hidden",
+          isTranslucent ? "bg-transparent" : "bg-background"
+        )}
+      >
+        {slot && (
+          <div
+            style={{ width }}
+            className={cn(
+              "relative border-r flex flex-col min-h-0 flex-shrink-0 pt-8",
+              isResizing || !hydrated ? "" : "transition-[width] duration-300",
+              isTranslucent ? "vibrant-sidebar" : "bg-background",
+              isTranslucent ? "border-transparent" : "border-border",
+              slot.className
+            )}
+          >
+            <div
+              ref={setContainer}
+              className="flex flex-col min-h-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-hide"
+            />
+            <div
+              role="separator"
+              aria-orientation="vertical"
+              aria-label="Resize sidebar"
+              onPointerDown={beginResize}
+              className="absolute top-0 right-0 h-full w-1.5 -mr-[3px] z-20 cursor-col-resize group/resize"
+            >
+              <div
+                className={cn(
+                  "absolute inset-y-0 right-[3px] w-px transition-colors",
+                  isResizing
+                    ? "bg-foreground/30"
+                    : "bg-transparent group-hover/resize:bg-foreground/15"
+                )}
+              />
+            </div>
+          </div>
+        )}
+        {children}
+      </div>
+    </SidebarShellContext.Provider>
+  );
+}
+
+export function AppSidebar({
+  children,
+  className,
+}: {
+  children: React.ReactNode;
+  className?: string;
+}) {
+  const shell = useContext(SidebarShellContext);
+
+  useIsomorphicLayoutEffect(() => {
+    shell?.setSlot({ className });
+    return () => shell?.setSlot(null);
+  }, [shell, className]);
+
+  if (!shell?.container) return null;
+  return createPortal(children, shell.container);
+}
