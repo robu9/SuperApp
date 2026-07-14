@@ -38,16 +38,15 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
     resumeAll,
   } = useRecordingStore();
 
-  const pausedCount = devices.filter((d) => !d.active).length;
-  const isPaused = isGloballyPaused || pausedCount > 0;
+  const monitorDevices = devices.filter((d) => d.kind === "monitor");
+  const monitorsPaused = monitorDevices.length > 0 && monitorDevices.every((d) => !d.active);
+  const isScreenPaused = isGloballyPaused || monitorsPaused;
   const summary =
     devices.length === 0
       ? "not recording"
-      : isGloballyPaused
+      : isScreenPaused
         ? "paused"
-        : pausedCount === 0
-          ? "recording"
-          : `${pausedCount} device${pausedCount > 1 ? "s" : ""} paused`;
+        : "recording";
   const label = meetingActive ? `${summary} · meeting notes` : summary;
 
   return (
@@ -66,9 +65,9 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
           <span
             className={cn(
               "w-2 h-2 border border-current",
-              meetingActive && !isPaused && "animate-pulse",
-              isPaused && !meetingActive && "bg-transparent",
-              !isPaused && "bg-current"
+              meetingActive && !isScreenPaused && "animate-pulse",
+              isScreenPaused && !meetingActive && "bg-transparent",
+              (!isScreenPaused || meetingActive) && "bg-current"
             )}
           />
           <span>{label}</span>
@@ -105,11 +104,11 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
         </div>
         <div className="p-3 flex flex-col gap-2 border-t border-border">
           <button
-            onClick={isGloballyPaused ? resumeAll : pauseAll}
+            onClick={isScreenPaused ? resumeAll : pauseAll}
             className="flex items-center justify-center gap-2 h-9 border border-border font-mono text-xs uppercase tracking-wide hover:bg-foreground hover:text-background transition-all duration-150"
           >
-            {isGloballyPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
-            {isGloballyPaused ? "resume all" : "pause all"}
+            {isScreenPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
+            {isScreenPaused ? "resume all" : "pause all"}
           </button>
           <button
             onClick={toggleMeeting}

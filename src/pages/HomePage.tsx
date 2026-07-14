@@ -191,7 +191,11 @@ export function HomePage() {
                 </div>
               </div>
             )}
-            {section === "timeline" && <TimelineSection />}
+            {section === "timeline" && (
+              <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
+                <TimelineSection />
+              </div>
+            )}
             {section === "pipes" && <PipesSection />}
             {section === "meetings" && <MeetingsSection />}
             {section === "brain" && <BrainSection />}

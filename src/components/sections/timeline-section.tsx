@@ -87,7 +87,16 @@ export function TimelineSection() {
     const strip = thumbStripRef.current;
     if (!strip) return;
     const active = strip.querySelector<HTMLElement>('[data-active="true"]');
-    active?.scrollIntoView({ behavior: "smooth", inline: "center", block: "nearest" });
+    if (!active) return;
+
+    // Scroll only inside the thumbnail strip — scrollIntoView scrolls ancestors and breaks layout.
+    const target =
+      active.offsetLeft - strip.clientWidth / 2 + active.clientWidth / 2;
+    const maxScroll = strip.scrollWidth - strip.clientWidth;
+    strip.scrollTo({
+      left: Math.max(0, Math.min(target, maxScroll)),
+      behavior: "smooth",
+    });
   }, [current, frames.length]);
 
   const goToFrame = (index: number) => {
@@ -103,7 +112,7 @@ export function TimelineSection() {
 
   if (loading) {
     return (
-      <div className="flex flex-col h-full min-h-0">
+      <div className="flex flex-col h-full min-h-0 min-w-0 w-full overflow-hidden">
         <div className="px-8 py-6 border-b border-border">
           <h1 className="text-2xl font-mono lowercase">timeline</h1>
         </div>
@@ -116,7 +125,7 @@ export function TimelineSection() {
 
   if (frames.length === 0) {
     return (
-      <div className="flex flex-col h-full min-h-0">
+      <div className="flex flex-col h-full min-h-0 min-w-0 w-full overflow-hidden">
         <div className="px-8 py-6 border-b border-border">
           <h1 className="text-2xl font-mono lowercase">timeline</h1>
           <p className="text-sm text-muted-foreground font-mono mt-1">
@@ -134,7 +143,7 @@ export function TimelineSection() {
   const atLatest = current === frames.length - 1;
 
   return (
-    <div className="flex flex-col h-full min-h-0">
+    <div className="flex flex-col h-full min-h-0 min-w-0 w-full overflow-hidden">
       <div className="px-8 py-6 border-b border-border flex items-center justify-between gap-4">
         <div>
           <h1 className="text-2xl font-mono lowercase">timeline</h1>
@@ -149,7 +158,7 @@ export function TimelineSection() {
           </Button>
         )}
       </div>
-      <div className="flex-1 flex flex-col min-h-0 p-6 gap-4">
+      <div className="flex-1 flex flex-col min-h-0 min-w-0 p-6 gap-4 overflow-hidden">
         <div className="flex-1 border border-border bg-surface flex items-center justify-center relative min-h-[300px] overflow-hidden">
           {imageSrc ? (
             <img
@@ -196,7 +205,7 @@ export function TimelineSection() {
             </Button>
           </div>
         </div>
-        <div ref={thumbStripRef} className="flex gap-1 overflow-x-auto scrollbar-hide pb-2">
+        <div ref={thumbStripRef} className="flex gap-1 overflow-x-auto overflow-y-hidden scrollbar-hide pb-2 min-w-0 shrink-0">
           {frames.map((f, i) => (
             <button
               key={f.id}
