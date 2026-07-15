@@ -40,6 +40,8 @@ function getBackendEntry(): { command: string; args: string[]; cwd: string } {
   const backendDir = path.join(__dirname, "..", "backend");
   const isDev = !app.isPackaged;
 
+  // The backend needs node:sqlite (Node >= 22.5). Electron's bundled Node is
+  // older, so process.execPath cannot run it — use the system node instead.
   if (isDev) {
     const tsxBin = path.join(
       backendDir,
@@ -49,14 +51,14 @@ function getBackendEntry(): { command: string; args: string[]; cwd: string } {
       "cli.mjs"
     );
     return {
-      command: process.execPath,
+      command: "node",
       args: [tsxBin, "src/index.ts"],
       cwd: backendDir,
     };
   }
 
   return {
-    command: process.execPath,
+    command: "node",
     args: [path.join(backendDir, "dist", "index.js")],
     cwd: backendDir,
   };
@@ -89,13 +91,21 @@ async function backendHasChatRoute(): Promise<boolean> {
 }
 
 async function killProcessOnPort(port: number): Promise<void> {
-  if (process.platform !== "win32") return;
   try {
-    const { stdout } = await execFileAsync("powershell", [
-      "-NoProfile",
-      "-Command",
-      `(Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue).OwningProcess | Select-Object -Unique`,
-    ]);
+    let stdout: string;
+    if (process.platform === "win32") {
+      ({ stdout } = await execFileAsync("powershell", [
+        "-NoProfile",
+        "-Command",
+        `(Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue).OwningProcess | Select-Object -Unique`,
+      ]));
+    } else {
+      ({ stdout } = await execFileAsync("lsof", [
+        "-ti",
+        `tcp:${port}`,
+        "-sTCP:LISTEN",
+      ]).catch(() => ({ stdout: "" })));
+    }
     const pids = stdout
       .trim()
       .split(/\r?\n/)
@@ -161,6 +171,13 @@ export async function startBackend(): Promise<void> {
 
   backendProcess.stderr?.on("data", (chunk: Buffer) => {
     console.error(`[backend] ${chunk.toString().trim()}`);
+  });
+
+  backendProcess.on("error", (err) => {
+    console.error(
+      `[backend] failed to spawn (is "node" on PATH?): ${err.message}`
+    );
+    backendProcess = null;
   });
 
   backendProcess.on("exit", (code) => {

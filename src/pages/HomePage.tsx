@@ -97,7 +97,7 @@ export function HomePage() {
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-screen min-h-0 flex-1 relative">
+      <div className="flex flex-col h-screen min-h-0 min-w-0 flex-1 relative">
         {/* Floating top-left chrome */}
         <div className="absolute top-0 left-0 right-0 z-30 flex items-center gap-1 px-3 pt-8 pb-2 pointer-events-none">
           <div className="flex items-center gap-1 pointer-events-auto">
@@ -143,7 +143,7 @@ export function HomePage() {
           </div>
         </div>
 
-        <div className="flex flex-1 min-h-0 pt-14">
+        <div className="flex flex-1 min-h-0 min-w-0 pt-14">
           {sidebarOpen && (
             <AppSidebar>
               <nav className="flex flex-col flex-1 min-h-0">

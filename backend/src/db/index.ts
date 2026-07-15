@@ -80,22 +80,6 @@ export function insertOcrText(
   });
 }
 
-export function insertAccessibilityText(frameId: number, text: string): void {
-  getDb()
-    .prepare(
-      `INSERT INTO accessibility_text (frame_id, text, text_length) VALUES (?, ?, ?)`
-    )
-    .run(frameId, text, text.length);
-  indexSearchContent({
-    content: text,
-    contentType: "accessibility",
-    frameId,
-    timestamp: getFrameTimestamp(frameId),
-    appName: getFrameAppName(frameId),
-    windowName: getFrameWindowName(frameId),
-  });
-}
-
 export function insertAudioTranscription(params: {
   timestamp: string;
   transcription: string;
@@ -181,20 +165,11 @@ export function getFrameById(id: number): FrameRow | null {
   return row ?? null;
 }
 
-export function getFrameText(id: number): {
-  accessibility: string | null;
-  ocr: string | null;
-} {
-  const ax = getDb()
-    .prepare(`SELECT text FROM accessibility_text WHERE frame_id = ? ORDER BY id DESC LIMIT 1`)
-    .get(id) as { text: string } | undefined;
+export function getFrameText(id: number): { ocr: string | null } {
   const ocr = getDb()
     .prepare(`SELECT text FROM ocr_text WHERE frame_id = ? ORDER BY id DESC LIMIT 1`)
     .get(id) as { text: string } | undefined;
-  return {
-    accessibility: ax?.text ?? null,
-    ocr: ocr?.text ?? null,
-  };
+  return { ocr: ocr?.text ?? null };
 }
 
 export function listFrames(params: {
@@ -350,8 +325,7 @@ export function getRecentScreenContext(limit = 10): RecentContextItem[] {
     .prepare(
       `SELECT f.timestamp, f.app_name, f.window_name,
         COALESCE(
-          (SELECT text FROM accessibility_text WHERE frame_id = f.id ORDER BY id DESC LIMIT 1),
-          (SELECT text FROM ocr_text WHERE frame_id = f.id ORDER BY id DESC LIMIT 1),
+          (SELECT substr(text, 1, 2000) FROM ocr_text WHERE frame_id = f.id ORDER BY id DESC LIMIT 1),
           f.window_name,
           f.app_name
         ) AS text
@@ -388,13 +362,25 @@ export function getRecentContext(limit = 12): RecentContextItem[] {
       const combined = [
         ...getRecentScreenContext(limit),
         ...getRecentAudioContext(5),
-      ];
-      return combined
-        .sort(
-          (a, b) =>
-            new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
-        )
-        .slice(0, limit);
+      ].sort(
+        (a, b) =>
+          new Date(b.timestamp).getTime() - new Date(a.timestamp).getTime()
+      );
+      // Collapse consecutive near-duplicate frames (same app, same text prefix)
+      const deduped: RecentContextItem[] = [];
+      for (const item of combined) {
+        const prev = deduped[deduped.length - 1];
+        if (
+          prev &&
+          prev.source === item.source &&
+          prev.app_name === item.app_name &&
+          prev.text.slice(0, 200) === item.text.slice(0, 200)
+        ) {
+          continue;
+        }
+        deduped.push(item);
+      }
+      return deduped.slice(0, limit);
     } catch (err) {
       const message = err instanceof Error ? err.message : String(err);
       if (!message.includes("locked") || attempt === 2) throw err;

@@ -50,7 +50,7 @@ SuperApp ships with a local capture engine in `backend/` that exposes a **Screen
 
 - Event-driven-lite screen capture (deduped frames every ~2s)
 - Active window + app metadata (Windows/macOS)
-- OCR text extraction (Tesseract.js) with accessibility metadata fallback
+- Real on-screen text via Apple Vision OCR on macOS (Swift helper compiled on first run), Tesseract.js elsewhere/fallback; runs async off the capture path (`SUPERAPP_OCR_ENGINE=native|tesseract|off`)
 - SQLite storage + FTS5 full-text search
 - REST API: `/health`, `/search`, `/frames`, `/vision/list`, `/audio/list`, `/engine/*`
 - Electron auto-starts the engine on launch

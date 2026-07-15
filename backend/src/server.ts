@@ -132,9 +132,8 @@ app.get("/frames/:id/text", (c) => {
   const text = getFrameText(id);
   return c.json({
     frame_id: id,
-    accessibility: text.accessibility,
     ocr: text.ocr,
-    text: text.accessibility ?? text.ocr ?? "",
+    text: text.ocr ?? "",
     timestamp: frame.timestamp,
     app_name: frame.app_name,
     window_name: frame.window_name,
@@ -156,7 +155,7 @@ app.get("/frames/:id/context", (c) => {
   const text = getFrameText(id);
   return c.json({
     frame_id: id,
-    context: text.accessibility ?? text.ocr ?? "",
+    context: text.ocr ?? "",
     app_name: frame.app_name,
     window_name: frame.window_name,
     browser_url: frame.browser_url,
@@ -254,9 +253,9 @@ app.post("/chat", async (c) => {
     const engine = captureEngine.state;
 
     // Always include recent screen + audio context (not keyword-dependent)
-    let recent = getRecentContext(12);
+    let recent = getRecentContext(8);
     if (recent.length === 0 && stats.framesCaptured > 0) {
-      recent = getRecentContext(12);
+      recent = getRecentContext(8);
     }
     const contextSnippets: string[] = recent.map((item) => {
       const sourceLabel = item.source === "audio" ? "[audio]" : "[screen]";
@@ -264,7 +263,7 @@ app.post("/chat", async (c) => {
         sourceLabel,
         item.app_name ? `[${item.app_name}]` : null,
         item.window_name ? `"${item.window_name}"` : null,
-        item.text,
+        item.text.slice(0, 1500),
       ].filter(Boolean);
       return parts.join(" ");
     });
@@ -282,8 +281,8 @@ app.post("/chat", async (c) => {
         contentType: "all",
       });
       const searchSnippets = data
-        .map((item) => item.content.text)
-        .filter(Boolean);
+        .map((item) => item.content.text?.slice(0, 800))
+        .filter(Boolean) as string[];
       for (const snippet of searchSnippets) {
         if (!contextSnippets.includes(snippet)) {
           contextSnippets.push(snippet);
@@ -291,7 +290,17 @@ app.post("/chat", async (c) => {
       }
     }
 
-    const content = await generateGeminiReply(body.messages, contextSnippets, {
+    // Total context budget so Gemini requests stay bounded
+    const CONTEXT_BUDGET = 24_000;
+    let budget = 0;
+    const boundedSnippets: string[] = [];
+    for (const snippet of contextSnippets) {
+      if (budget + snippet.length > CONTEXT_BUDGET) break;
+      budget += snippet.length;
+      boundedSnippets.push(snippet);
+    }
+
+    const content = await generateGeminiReply(body.messages, boundedSnippets, {
       screenRecording: engine.running && !engine.paused,
       framesCaptured: stats.framesCaptured,
       audioRecording: isAudioRecording(),
@@ -340,9 +349,7 @@ app.post("/add", async (c) => {
     return c.json({ status: "ok", id });
   }
 
-  const { insertFrame, insertOcrText, insertAccessibilityText } = await import(
-    "./db/index.js"
-  );
+  const { insertFrame, insertOcrText } = await import("./db/index.js");
   const frameId = insertFrame({
     timestamp,
     appName: body.app_name ?? null,
@@ -353,11 +360,8 @@ app.post("/add", async (c) => {
     focused: true,
   });
 
-  if (body.type === "accessibility") {
-    insertAccessibilityText(frameId, body.text);
-  } else {
-    insertOcrText(frameId, body.text);
-  }
+  // "accessibility" type is kept for API compat but stored as OCR text
+  insertOcrText(frameId, body.text);
 
   return c.json({ status: "ok", frame_id: frameId });
 });

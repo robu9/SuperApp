@@ -21,6 +21,12 @@ export const CAPTURE_INTERVAL_MS = Number(
 );
 
 export const OCR_ENABLED = process.env.SUPERAPP_OCR !== "0";
+
+/** OCR engine override: "native" (platform default), "tesseract", or "off" */
+export const OCR_ENGINE = (process.env.SUPERAPP_OCR_ENGINE ?? "native") as
+  | "native"
+  | "tesseract"
+  | "off";
 export const AUDIO_ENABLED = process.env.SUPERAPP_AUDIO !== "0";
 
 /** Audio chunk length in seconds before transcription */

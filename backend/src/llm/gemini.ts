@@ -55,9 +55,9 @@ function toGeminiContents(messages: ChatTurn[], contextSnippets: string[] = []) 
   const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
 
   if (contextSnippets.length > 0) {
+    // Caller (server.ts /chat) already truncates and budgets snippets
     const historyBlock = contextSnippets
-      .slice(0, 12)
-      .map((snippet, i) => `${i + 1}. ${snippet.slice(0, 800)}`)
+      .map((snippet, i) => `${i + 1}. ${snippet}`)
       .join("\n");
 
     contents.push({

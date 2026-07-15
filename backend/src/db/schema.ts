@@ -2,6 +2,11 @@ export const SCHEMA_SQL = `
 PRAGMA journal_mode = WAL;
 PRAGMA foreign_keys = ON;
 
+-- Migration: window metadata used to be stored as fake "accessibility" text,
+-- polluting search. Drop the table and purge its FTS rows.
+DROP TABLE IF EXISTS accessibility_text;
+DROP INDEX IF EXISTS idx_ax_frame;
+
 CREATE TABLE IF NOT EXISTS frames (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT NOT NULL,
@@ -20,13 +25,6 @@ CREATE TABLE IF NOT EXISTS ocr_text (
   text TEXT NOT NULL,
   text_length INTEGER NOT NULL,
   confidence REAL DEFAULT 0
-);
-
-CREATE TABLE IF NOT EXISTS accessibility_text (
-  id INTEGER PRIMARY KEY AUTOINCREMENT,
-  frame_id INTEGER NOT NULL REFERENCES frames(id) ON DELETE CASCADE,
-  text TEXT NOT NULL,
-  text_length INTEGER NOT NULL
 );
 
 CREATE TABLE IF NOT EXISTS ui_elements (
@@ -51,7 +49,6 @@ CREATE TABLE IF NOT EXISTS audio_transcriptions (
 CREATE INDEX IF NOT EXISTS idx_frames_timestamp ON frames(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_frames_app ON frames(app_name);
 CREATE INDEX IF NOT EXISTS idx_ocr_frame ON ocr_text(frame_id);
-CREATE INDEX IF NOT EXISTS idx_ax_frame ON accessibility_text(frame_id);
 CREATE INDEX IF NOT EXISTS idx_audio_timestamp ON audio_transcriptions(timestamp DESC);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
@@ -64,4 +61,6 @@ CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
   window_name UNINDEXED,
   tokenize='porter unicode61'
 );
+
+DELETE FROM search_fts WHERE content_type = 'accessibility';
 `;

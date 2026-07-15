@@ -1,20 +1,27 @@
 import { createHash } from "crypto";
 import { CAPTURE_INTERVAL_MS } from "../config.js";
-import {
-  insertAccessibilityText,
-  insertFrame,
-  insertOcrText,
-  saveFrameImage,
-} from "../db/index.js";
+import { insertFrame, insertOcrText, saveFrameImage } from "../db/index.js";
 import type { EngineState } from "../types.js";
-import { runOcr, terminateOcr } from "./ocr.js";
+import { extractText, terminateOcr } from "./ocr.js";
 import { captureAllMonitors } from "./screen.js";
 import { getActiveWindow } from "./window.js";
+
+interface OcrJob {
+  frameId: number;
+  imagePath: string;
+  buffer: Buffer;
+}
+
+/** Max pending OCR jobs before oldest are dropped (CPU safety valve). */
+const OCR_QUEUE_MAX = 3;
 
 export class CaptureEngine {
   private timer: ReturnType<typeof setInterval> | null = null;
   private lastHashes = new Map<string, string>();
   private capturing = false;
+  private ocrQueue: OcrJob[] = [];
+  private ocrBusy = false;
+  private ocrDropped = 0;
 
   readonly state: EngineState = {
     running: false,
@@ -47,6 +54,7 @@ export class CaptureEngine {
     }
     this.state.running = false;
     this.state.paused = false;
+    this.ocrQueue = [];
     void terminateOcr();
     console.log("[engine] stopped");
   }
@@ -59,6 +67,39 @@ export class CaptureEngine {
   resume(): void {
     this.state.paused = false;
     console.log("[engine] resumed");
+  }
+
+  private enqueueOcr(job: OcrJob): void {
+    this.ocrQueue.push(job);
+    while (this.ocrQueue.length > OCR_QUEUE_MAX) {
+      this.ocrQueue.shift();
+      this.ocrDropped += 1;
+      console.warn(
+        `[engine] ocr backlog full, dropped oldest job (total dropped: ${this.ocrDropped})`
+      );
+    }
+    void this.drainOcrQueue();
+  }
+
+  private async drainOcrQueue(): Promise<void> {
+    if (this.ocrBusy) return;
+    this.ocrBusy = true;
+    try {
+      while (this.ocrQueue.length > 0) {
+        const job = this.ocrQueue.shift()!;
+        try {
+          const { text, confidence } = await extractText(
+            job.imagePath,
+            job.buffer
+          );
+          if (text) insertOcrText(job.frameId, text, confidence);
+        } catch (err) {
+          console.error("[engine] ocr job failed:", err);
+        }
+      }
+    } finally {
+      this.ocrBusy = false;
+    }
   }
 
   private async tick(): Promise<void> {
@@ -88,13 +129,8 @@ export class CaptureEngine {
           focused: String(monitorId).includes("DISPLAY1") || monitorId === 0,
         });
 
-        const axText = await extractAccessibilityText(activeWindow);
-        if (axText) {
-          insertAccessibilityText(frameId, axText);
-        } else {
-          const { text, confidence } = await runOcr(buffer);
-          if (text) insertOcrText(frameId, text, confidence);
-        }
+        // OCR runs async off the tick path so capture cadence never blocks
+        this.enqueueOcr({ frameId, imagePath, buffer });
 
         this.state.framesCaptured += 1;
       }
@@ -105,17 +141,6 @@ export class CaptureEngine {
       this.capturing = false;
     }
   }
-}
-
-async function extractAccessibilityText(
-  activeWindow: Awaited<ReturnType<typeof getActiveWindow>>
-): Promise<string | null> {
-  if (!activeWindow) return null;
-  const parts = [activeWindow.title, activeWindow.app, activeWindow.browserUrl].filter(
-    Boolean
-  );
-  const text = parts.join("\n").trim();
-  return text.length > 0 ? text : null;
 }
 
 export const captureEngine = new CaptureEngine();

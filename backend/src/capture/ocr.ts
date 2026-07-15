@@ -1,11 +1,12 @@
+import sharp from "sharp";
 import { createWorker, type Worker } from "tesseract.js";
-import { OCR_ENABLED } from "../config.js";
+import { OCR_ENABLED, OCR_ENGINE } from "../config.js";
+import { runNativeOcr } from "./ocr-native.js";
 
 let worker: Worker | null = null;
 let workerReady = false;
 
 async function ensureWorker(): Promise<Worker | null> {
-  if (!OCR_ENABLED) return null;
   if (worker && workerReady) return worker;
 
   try {
@@ -18,7 +19,7 @@ async function ensureWorker(): Promise<Worker | null> {
   }
 }
 
-export async function runOcr(imageBuffer: Buffer): Promise<{
+async function runTesseract(imageBuffer: Buffer): Promise<{
   text: string;
   confidence: number;
 }> {
@@ -26,7 +27,11 @@ export async function runOcr(imageBuffer: Buffer): Promise<{
   if (!ocrWorker) return { text: "", confidence: 0 };
 
   try {
-    const result = await ocrWorker.recognize(imageBuffer);
+    // Downscale before recognition — big speedup at minor accuracy cost
+    const resized = await sharp(imageBuffer)
+      .resize({ width: 1600, withoutEnlargement: true })
+      .toBuffer();
+    const result = await ocrWorker.recognize(resized);
     return {
       text: result.data.text.trim(),
       confidence: result.data.confidence,
@@ -35,6 +40,27 @@ export async function runOcr(imageBuffer: Buffer): Promise<{
     console.error("[ocr] recognition failed:", err);
     return { text: "", confidence: 0 };
   }
+}
+
+/**
+ * Extract on-screen text from a captured frame.
+ * darwin: Apple Vision (native helper), falling back to Tesseract.
+ * elsewhere: Tesseract.
+ */
+export async function extractText(
+  imagePath: string,
+  imageBuffer: Buffer
+): Promise<{ text: string; confidence: number }> {
+  if (!OCR_ENABLED || OCR_ENGINE === "off") {
+    return { text: "", confidence: 0 };
+  }
+
+  if (process.platform === "darwin" && OCR_ENGINE !== "tesseract") {
+    const native = await runNativeOcr(imagePath);
+    if (native) return native;
+  }
+
+  return runTesseract(imageBuffer);
 }
 
 export async function terminateOcr(): Promise<void> {
