@@ -8,6 +8,10 @@ release/
 .aidesigner/runs/
 screenpipe-main/
 .env
+.env.*
+!.env.example
+Untitled
+Untitled*
 *.log
 .DS_Store
 Thumbs.db
