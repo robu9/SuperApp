@@ -5,6 +5,11 @@ import path from "path";
 import { promisify } from "util";
 import { AUDIO_CHUNK_SEC, AUDIO_DIR, AUDIO_ENABLED } from "../config.js";
 import { insertAudioTranscription } from "../db/index.js";
+import {
+  closeMeeting,
+  closeOrphanOpenMeetings,
+  createMeeting,
+} from "../db/meetings.js";
 import { transcribeAudio } from "../llm/gemini.js";
 import type { AudioDeviceInfo } from "../types.js";
 
@@ -17,6 +22,7 @@ class AudioRecorder {
   private currentProcess: ChildProcess | null = null;
   private inputDevice: string | null = null;
   private chunkIndex = 0;
+  private currentMeetingId: number | null = null;
 
   isRecording(): boolean {
     return this.recording;
@@ -28,6 +34,8 @@ class AudioRecorder {
     this.inputDevice = await resolveInputDevice();
     this.recording = true;
     this.chunkIndex = 0;
+    closeOrphanOpenMeetings();
+    this.currentMeetingId = createMeeting(new Date().toISOString());
     console.log(
       `[audio] recording started (device: ${this.inputDevice ?? "default"}, chunk ${AUDIO_CHUNK_SEC}s)`
     );
@@ -43,6 +51,10 @@ class AudioRecorder {
     if (this.currentProcess) {
       this.currentProcess.kill("SIGTERM");
       this.currentProcess = null;
+    }
+    if (this.currentMeetingId !== null) {
+      closeMeeting(this.currentMeetingId, new Date().toISOString());
+      this.currentMeetingId = null;
     }
     console.log("[audio] recording stopped");
   }
@@ -65,6 +77,8 @@ class AudioRecorder {
     const filename = `audio_${Date.now()}_c${this.chunkIndex++}.wav`;
     const filePath = path.join(AUDIO_DIR, filename);
     const args = buildRecordArgs(this.inputDevice, filePath, AUDIO_CHUNK_SEC);
+    // Capture before recording: transcription may finish after stop()
+    const meetingId = this.currentMeetingId;
 
     await new Promise<void>((resolve, reject) => {
       const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
@@ -93,23 +107,35 @@ class AudioRecorder {
       return;
     }
 
-    void this.transcribeChunk(filePath, filename);
+    void this.transcribeChunk(filePath, filename, meetingId);
   }
 
-  private async transcribeChunk(filePath: string, filename: string): Promise<void> {
+  private async transcribeChunk(
+    filePath: string,
+    filename: string,
+    meetingId: number | null
+  ): Promise<void> {
     try {
       const text = await transcribeAudio(filePath);
-      if (!text.trim()) {
+      const cleaned = text.trim();
+      // Gemini sometimes answers "No speech detected." instead of an empty
+      // string; also skip punctuation-only results.
+      if (
+        !cleaned ||
+        /^no speech( was)? detected\.?$/i.test(cleaned) ||
+        !/[\p{L}\p{N}]/u.test(cleaned)
+      ) {
         console.log(`[audio] chunk ${filename}: no speech detected`);
         return;
       }
 
       insertAudioTranscription({
         timestamp: new Date().toISOString(),
-        transcription: text,
+        transcription: cleaned,
         filePath,
         deviceName: this.inputDevice ?? "default",
         durationSecs: AUDIO_CHUNK_SEC,
+        meetingId,
       });
 
       console.log(`[audio] transcribed chunk ${filename} (${text.length} chars)`);

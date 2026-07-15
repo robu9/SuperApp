@@ -68,6 +68,30 @@ export interface EngineStatus {
   lastError: string | null;
 }
 
+export interface MeetingListItem {
+  id: number;
+  started_at: string;
+  ended_at: string | null;
+  title: string | null;
+  summary: string | null;
+  action_items: string[] | null;
+  notes: string | null;
+  chunk_count: number;
+  audio_secs: number;
+  live: boolean;
+}
+
+export interface TranscriptChunk {
+  id: number;
+  timestamp: string;
+  transcription: string;
+  duration_secs: number | null;
+}
+
+export interface MeetingDetail extends Omit<MeetingListItem, "chunk_count" | "audio_secs"> {
+  transcript: TranscriptChunk[];
+}
+
 export interface ChatRequest {
   messages: Array<{ role: "user" | "assistant"; content: string }>;
   context_query?: string;
@@ -163,6 +187,15 @@ export const api = {
   audioStart: () => request<{ recording: boolean }>("POST", "/audio/start"),
   audioStop: () => request<{ recording: boolean }>("POST", "/audio/stop"),
   chat: (body: ChatRequest) => request<ChatResponse>("POST", "/chat", body),
+  meetings: () => request<{ data: MeetingListItem[] }>("GET", "/meetings"),
+  meeting: (id: number) => request<MeetingDetail>("GET", `/meetings/${id}`),
+  updateMeeting: (id: number, body: { title?: string | null; notes?: string | null }) =>
+    request<MeetingDetail>("PATCH", `/meetings/${id}`, body),
+  summarizeMeeting: (id: number) =>
+    request<{ title: string; summary: string; action_items: string[] }>(
+      "POST",
+      `/meetings/${id}/summarize`
+    ),
 };
 
 /** Load a frame screenshot for display — base64 via API first (Electron-safe), then binary URL. */

@@ -35,6 +35,17 @@ CREATE TABLE IF NOT EXISTS ui_elements (
   bounds_json TEXT
 );
 
+CREATE TABLE IF NOT EXISTS meetings (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  title TEXT,
+  summary TEXT,
+  action_items TEXT,
+  notes TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS audio_transcriptions (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT NOT NULL,
@@ -43,6 +54,7 @@ CREATE TABLE IF NOT EXISTS audio_transcriptions (
   device_name TEXT,
   duration_secs REAL,
   speaker_id TEXT,
+  meeting_id INTEGER REFERENCES meetings(id),
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );
 
@@ -50,6 +62,8 @@ CREATE INDEX IF NOT EXISTS idx_frames_timestamp ON frames(timestamp DESC);
 CREATE INDEX IF NOT EXISTS idx_frames_app ON frames(app_name);
 CREATE INDEX IF NOT EXISTS idx_ocr_frame ON ocr_text(frame_id);
 CREATE INDEX IF NOT EXISTS idx_audio_timestamp ON audio_transcriptions(timestamp DESC);
+CREATE INDEX IF NOT EXISTS idx_audio_meeting ON audio_transcriptions(meeting_id);
+CREATE INDEX IF NOT EXISTS idx_meetings_started ON meetings(started_at DESC);
 
 CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
   content,

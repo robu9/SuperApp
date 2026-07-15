@@ -18,6 +18,15 @@ export function initDatabase(): DatabaseSync {
   db.exec("PRAGMA journal_mode = WAL");
   db.exec("PRAGMA synchronous = NORMAL");
   db.exec("PRAGMA busy_timeout = 10000");
+
+  // Migration: audio_transcriptions predating the meetings feature lacks meeting_id
+  const audioCols = db
+    .prepare(`PRAGMA table_info(audio_transcriptions)`)
+    .all() as Array<{ name: string }>;
+  if (audioCols.length > 0 && !audioCols.some((c) => c.name === "meeting_id")) {
+    db.exec(`ALTER TABLE audio_transcriptions ADD COLUMN meeting_id INTEGER`);
+  }
+
   db.exec(SCHEMA_SQL);
   return db;
 }
@@ -86,18 +95,20 @@ export function insertAudioTranscription(params: {
   filePath?: string;
   deviceName?: string;
   durationSecs?: number;
+  meetingId?: number | null;
 }): number {
   getDb()
     .prepare(
-      `INSERT INTO audio_transcriptions (timestamp, transcription, file_path, device_name, duration_secs)
-       VALUES (?, ?, ?, ?, ?)`
+      `INSERT INTO audio_transcriptions (timestamp, transcription, file_path, device_name, duration_secs, meeting_id)
+       VALUES (?, ?, ?, ?, ?, ?)`
     )
     .run(
       params.timestamp,
       params.transcription,
       params.filePath ?? null,
       params.deviceName ?? null,
-      params.durationSecs ?? null
+      params.durationSecs ?? null,
+      params.meetingId ?? null
     );
   const audioId = lastInsertId();
   indexSearchContent({

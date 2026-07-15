@@ -23,8 +23,21 @@ import {
   runReadOnlySql,
   searchContent,
 } from "./db/index.js";
+import {
+  backfillOrphanTranscriptions,
+  closeOrphanOpenMeetings,
+  deleteStaleEmptyMeetings,
+  getMeeting,
+  getMeetingTranscript,
+  listMeetings,
+  updateMeeting,
+} from "./db/meetings.js";
 import type { ContentType } from "./types.js";
-import { generateGeminiReply, type ChatTurn } from "./llm/gemini.js";
+import {
+  generateGeminiReply,
+  summarizeMeeting,
+  type ChatTurn,
+} from "./llm/gemini.js";
 
 const app = new Hono();
 const startTime = Date.now();
@@ -214,6 +227,98 @@ app.post("/audio/stop", (c) => {
   return c.json({ status: "ok", recording: false });
 });
 
+function parseActionItems(raw: string | null): string[] | null {
+  if (!raw) return null;
+  try {
+    const parsed = JSON.parse(raw);
+    return Array.isArray(parsed) ? parsed : null;
+  } catch {
+    return null;
+  }
+}
+
+app.get("/meetings", (c) => {
+  const rows = listMeetings();
+  const data = rows.map((m) => ({
+    ...m,
+    action_items: parseActionItems(m.action_items),
+    live: m.ended_at === null && isAudioRecording(),
+  }));
+  return c.json({ data });
+});
+
+app.get("/meetings/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "invalid meeting id" }, 400);
+  const meeting = getMeeting(id);
+  if (!meeting) return c.json({ error: "meeting not found" }, 404);
+  return c.json({
+    ...meeting,
+    action_items: parseActionItems(meeting.action_items),
+    live: meeting.ended_at === null && isAudioRecording(),
+    transcript: getMeetingTranscript(id),
+  });
+});
+
+app.patch("/meetings/:id", async (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "invalid meeting id" }, 400);
+  const meeting = getMeeting(id);
+  if (!meeting) return c.json({ error: "meeting not found" }, 404);
+
+  const body = await c.req.json<{ title?: string | null; notes?: string | null }>();
+  const fields: { title?: string | null; notes?: string | null } = {};
+  if ("title" in body) fields.title = body.title;
+  if ("notes" in body) fields.notes = body.notes;
+  if (Object.keys(fields).length === 0) {
+    return c.json({ error: "title or notes required" }, 400);
+  }
+
+  updateMeeting(id, fields);
+  const updated = getMeeting(id)!;
+  return c.json({
+    ...updated,
+    action_items: parseActionItems(updated.action_items),
+  });
+});
+
+app.post("/meetings/:id/summarize", async (c) => {
+  try {
+    const id = Number(c.req.param("id"));
+    if (!Number.isFinite(id)) return c.json({ error: "invalid meeting id" }, 400);
+    const meeting = getMeeting(id);
+    if (!meeting) return c.json({ error: "meeting not found" }, 404);
+
+    const transcript = getMeetingTranscript(id);
+    if (transcript.length === 0) {
+      return c.json({ error: "meeting has no transcript yet" }, 400);
+    }
+
+    const text = transcript
+      .map((chunk) => `[${chunk.timestamp}] ${chunk.transcription}`)
+      .join("\n");
+    const result = await summarizeMeeting(text);
+
+    updateMeeting(id, {
+      summary: result.summary,
+      action_items: JSON.stringify(result.action_items),
+      // Don't clobber a user-set title
+      ...(meeting.title ? {} : { title: result.title }),
+    });
+
+    return c.json({
+      title: meeting.title ?? result.title,
+      summary: result.summary,
+      action_items: result.action_items,
+    });
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "summarize failed" },
+      500
+    );
+  }
+});
+
 app.post("/engine/start", (c) => {
   captureEngine.start();
   return c.json({ status: "ok", running: true });
@@ -368,6 +473,9 @@ app.post("/add", async (c) => {
 
 export function startServer(): void {
   initDatabase();
+  closeOrphanOpenMeetings();
+  deleteStaleEmptyMeetings();
+  backfillOrphanTranscriptions();
   captureEngine.start();
 
   if (AUDIO_ENABLED) {

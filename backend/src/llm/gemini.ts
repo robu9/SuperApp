@@ -144,6 +144,65 @@ export async function generateGeminiReply(
   return text;
 }
 
+export interface MeetingSummary {
+  title: string;
+  summary: string;
+  action_items: string[];
+}
+
+/** Generate a title, summary, and action items for a meeting transcript. */
+export async function summarizeMeeting(transcript: string): Promise<MeetingSummary> {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not set. Add it to the project .env file.");
+  }
+
+  const prompt = [
+    "You are summarizing a meeting from an automatic transcript (30-second chunks, no speaker labels, may contain transcription errors).",
+    "Return ONLY a JSON object with exactly these keys:",
+    '{"title": "short lowercase title (max 6 words)", "summary": "2-4 sentence summary", "action_items": ["specific action item", ...]}',
+    "action_items may be an empty array if none were discussed.",
+    "",
+    "Transcript:",
+    transcript.slice(0, 30_000),
+  ].join("\n");
+
+  const res = await fetch(
+    `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+    }
+  );
+
+  const data = (await res.json()) as GeminiResponse;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? `Gemini summarize failed (${res.status})`);
+  }
+
+  const raw =
+    data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? "")
+      .join("")
+      .trim() ?? "";
+
+  const jsonText = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+  const parsed = JSON.parse(jsonText) as Partial<MeetingSummary>;
+  return {
+    title: typeof parsed.title === "string" ? parsed.title : "meeting",
+    summary: typeof parsed.summary === "string" ? parsed.summary : "",
+    action_items: Array.isArray(parsed.action_items)
+      ? parsed.action_items.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
 /** Transcribe a local audio file via Gemini multimodal API. */
 export async function transcribeAudio(filePath: string): Promise<string> {
   if (!GEMINI_API_KEY) {
