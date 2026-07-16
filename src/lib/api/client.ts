@@ -142,6 +142,41 @@ export interface MemoryStatsResponse {
   by_type: Record<string, number>;
 }
 
+export type PipeId =
+  | "daily-summary"
+  | "meeting-recap"
+  | "focus-tracker"
+  | "action-items";
+
+export interface PipeListItem {
+  id: PipeId;
+  name: string;
+  description: string;
+  schedule: string;
+  installed: boolean;
+  enabled: boolean;
+  last_run_at: string | null;
+  last_run_status: string | null;
+  running: boolean;
+}
+
+export interface PipeRunLog {
+  id: number;
+  pipe_id: string;
+  started_at: string;
+  finished_at: string | null;
+  status: string;
+  output: string | null;
+  error: string | null;
+}
+
+export interface PipeRunResponse {
+  status: "ok" | "error";
+  run_id: number;
+  output?: string;
+  error?: string;
+}
+
 async function getBaseUrl(): Promise<string> {
   if (electron?.getApiUrl) {
     return electron.getApiUrl();
@@ -250,6 +285,16 @@ export const api = {
   memoryStats: () => request<MemoryStatsResponse>("GET", "/memory/stats"),
   createMemory: (body: { title: string; content: string; related_node_ids?: number[] }) =>
     request<{ id: number; node: MemoryNode }>("POST", "/memory", body),
+  pipes: () => request<{ data: PipeListItem[] }>("GET", "/pipes"),
+  installPipe: (id: PipeId) =>
+    request<{ status: string; installed: boolean }>("POST", `/pipes/${id}/install`),
+  uninstallPipe: (id: PipeId) =>
+    request<{ status: string; installed: boolean }>("POST", `/pipes/${id}/uninstall`),
+  enablePipe: (id: PipeId, enabled = true) =>
+    request<{ status: string; enabled: boolean }>("POST", `/pipes/${id}/enable`, { enabled }),
+  runPipe: (id: PipeId) => request<PipeRunResponse>("POST", `/pipes/${id}/run`),
+  pipeLogs: (id: PipeId, limit = 10) =>
+    request<{ data: PipeRunLog[] }>("GET", `/pipes/${id}/logs?limit=${limit}`),
 };
 
 /** Load a frame screenshot for display — base64 via API first (Electron-safe), then binary URL. */

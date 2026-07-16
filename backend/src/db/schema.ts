@@ -89,4 +89,26 @@ CREATE VIRTUAL TABLE IF NOT EXISTS search_fts USING fts5(
 );
 
 DELETE FROM search_fts WHERE content_type = 'accessibility';
+
+CREATE TABLE IF NOT EXISTS pipe_state (
+  pipe_id TEXT PRIMARY KEY,
+  installed INTEGER NOT NULL DEFAULT 0,
+  enabled INTEGER NOT NULL DEFAULT 0,
+  last_run_at TEXT,
+  last_run_status TEXT,
+  updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE IF NOT EXISTS pipe_runs (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  pipe_id TEXT NOT NULL,
+  started_at TEXT NOT NULL,
+  finished_at TEXT,
+  status TEXT NOT NULL DEFAULT 'running',
+  output TEXT,
+  error TEXT,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE INDEX IF NOT EXISTS idx_pipe_runs_pipe ON pipe_runs(pipe_id, started_at DESC);
 `;

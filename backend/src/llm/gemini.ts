@@ -261,3 +261,136 @@ export async function transcribeAudio(filePath: string): Promise<string> {
       .trim() ?? ""
   );
 }
+
+async function generateJsonFromPrompt<T>(prompt: string): Promise<T> {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not set. Add it to the project .env file.");
+  }
+
+  const res = await fetch(
+    `${GEMINI_API_BASE}/models/${GEMINI_MODEL}:generateContent`,
+    {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-goog-api-key": GEMINI_API_KEY,
+      },
+      body: JSON.stringify({
+        contents: [{ parts: [{ text: prompt }] }],
+        generationConfig: { responseMimeType: "application/json" },
+      }),
+    }
+  );
+
+  const data = (await res.json()) as GeminiResponse;
+  if (!res.ok) {
+    throw new Error(data.error?.message ?? `Gemini request failed (${res.status})`);
+  }
+
+  const raw =
+    data.candidates?.[0]?.content?.parts
+      ?.map((part) => part.text ?? "")
+      .join("")
+      .trim() ?? "";
+
+  const jsonText = raw.replace(/^```(?:json)?\s*/i, "").replace(/```\s*$/, "");
+  return JSON.parse(jsonText) as T;
+}
+
+export interface DailySummaryResult {
+  title: string;
+  summary: string;
+  highlights: string[];
+}
+
+export async function generateDailySummary(params: {
+  activity: string;
+  context: string;
+}): Promise<DailySummaryResult> {
+  const prompt = [
+    "You are summarizing the user's work day from local screen captures and audio transcriptions.",
+    "Return ONLY JSON:",
+    '{"title":"short lowercase title","summary":"3-5 sentence narrative","highlights":["notable moment", ...]}',
+    "Use lowercase friendly tone. If there is little data, say so honestly.",
+    "",
+    "App activity:",
+    params.activity.slice(0, 8000),
+    "",
+    "Captured context:",
+    params.context.slice(0, 24_000),
+  ].join("\n");
+
+  const parsed = await generateJsonFromPrompt<Partial<DailySummaryResult>>(prompt);
+  return {
+    title: typeof parsed.title === "string" ? parsed.title : "daily summary",
+    summary: typeof parsed.summary === "string" ? parsed.summary : "",
+    highlights: Array.isArray(parsed.highlights)
+      ? parsed.highlights.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+export interface FocusReportResult {
+  summary: string;
+  top_apps: Array<{ app: string; assessment: string }>;
+  suggestions: string[];
+}
+
+export async function generateFocusReport(params: {
+  activity: string;
+  context: string;
+}): Promise<FocusReportResult> {
+  const prompt = [
+    "Analyze the user's recent app usage and screen activity for focus and productivity.",
+    "Return ONLY JSON:",
+    '{"summary":"2-3 sentences","top_apps":[{"app":"name","assessment":"brief note"}],"suggestions":["actionable focus suggestion", ...]}',
+    "Suggest concrete focus blocks or habit changes. Be specific, not generic.",
+    "",
+    "App activity:",
+    params.activity.slice(0, 8000),
+    "",
+    "Recent context:",
+    params.context.slice(0, 16_000),
+  ].join("\n");
+
+  const parsed = await generateJsonFromPrompt<Partial<FocusReportResult>>(prompt);
+  return {
+    summary: typeof parsed.summary === "string" ? parsed.summary : "",
+    top_apps: Array.isArray(parsed.top_apps)
+      ? parsed.top_apps
+          .filter(
+            (item): item is { app: string; assessment: string } =>
+              typeof item?.app === "string" && typeof item?.assessment === "string"
+          )
+          .slice(0, 8)
+      : [],
+    suggestions: Array.isArray(parsed.suggestions)
+      ? parsed.suggestions.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}
+
+export interface ActionItemsResult {
+  action_items: string[];
+  summary: string;
+}
+
+export async function extractActionItems(context: string): Promise<ActionItemsResult> {
+  const prompt = [
+    "Extract concrete action items / todos from recent conversations and screen text.",
+    "Return ONLY JSON:",
+    '{"summary":"one sentence on what you found","action_items":["specific todo", ...]}',
+    "Only include items that sound like real tasks the user should do. Empty array is fine.",
+    "",
+    "Recent context:",
+    context.slice(0, 28_000),
+  ].join("\n");
+
+  const parsed = await generateJsonFromPrompt<Partial<ActionItemsResult>>(prompt);
+  return {
+    summary: typeof parsed.summary === "string" ? parsed.summary : "",
+    action_items: Array.isArray(parsed.action_items)
+      ? parsed.action_items.filter((item): item is string => typeof item === "string")
+      : [],
+  };
+}

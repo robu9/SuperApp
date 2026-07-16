@@ -53,6 +53,17 @@ import {
   listNodes,
   retrieveContextForChat,
 } from "./memory/index.js";
+import {
+  getRunningPipes,
+  initPipeState,
+  listPipeRuns,
+  listPipes,
+  runPipe,
+  setPipeEnabled,
+  setPipeInstalled,
+  startPipeScheduler,
+} from "./pipes/index.js";
+import { getPipeDefinition } from "./pipes/definitions.js";
 
 const app = new Hono();
 const startTime = Date.now();
@@ -121,6 +132,65 @@ app.get("/activity-summary", (c) => {
   const start = c.req.query("start_time") ?? new Date(Date.now() - 86400000).toISOString();
   const end = c.req.query("end_time") ?? new Date().toISOString();
   return c.json(getActivitySummary(start, end));
+});
+
+app.get("/pipes", (c) => {
+  return c.json({ data: listPipes(getRunningPipes()) });
+});
+
+app.post("/pipes/:id/install", (c) => {
+  const id = c.req.param("id");
+  if (!getPipeDefinition(id)) return c.json({ error: "unknown pipe" }, 404);
+  setPipeInstalled(id, true);
+  return c.json({ status: "ok", installed: true });
+});
+
+app.post("/pipes/:id/uninstall", (c) => {
+  const id = c.req.param("id");
+  if (!getPipeDefinition(id)) return c.json({ error: "unknown pipe" }, 404);
+  setPipeInstalled(id, false);
+  return c.json({ status: "ok", installed: false });
+});
+
+app.post("/pipes/:id/enable", async (c) => {
+  const id = c.req.param("id");
+  if (!getPipeDefinition(id)) return c.json({ error: "unknown pipe" }, 404);
+  const body = (await c.req.json<{ enabled?: boolean }>().catch(() => ({
+    enabled: true,
+  }))) as { enabled?: boolean };
+  const enabled = body.enabled !== false;
+  setPipeEnabled(id, enabled);
+  return c.json({ status: "ok", enabled });
+});
+
+app.post("/pipes/:id/run", async (c) => {
+  const id = c.req.param("id");
+  if (!getPipeDefinition(id)) return c.json({ error: "unknown pipe" }, 404);
+  try {
+    const result = await runPipe(id);
+    return c.json(result);
+  } catch (err) {
+    return c.json(
+      { status: "error", error: err instanceof Error ? err.message : "pipe run failed" },
+      500
+    );
+  }
+});
+
+app.get("/pipes/:id/logs", (c) => {
+  const id = c.req.param("id");
+  if (!getPipeDefinition(id)) return c.json({ error: "unknown pipe" }, 404);
+  const limit = Number(c.req.query("limit") ?? 20);
+  const runs = listPipeRuns(id, limit).map((run) => ({
+    id: run.id,
+    pipe_id: run.pipe_id,
+    started_at: run.started_at,
+    finished_at: run.finished_at,
+    status: run.status,
+    output: run.output,
+    error: run.error,
+  }));
+  return c.json({ data: runs });
 });
 
 /** Load a frame's pixels: video chunk extraction first, legacy JPEG fallback. */
@@ -593,6 +663,7 @@ app.post("/add", async (c) => {
 export function startServer(): void {
   initDatabase();
   initSupermemory();
+  initPipeState();
   void backfillSupermemory();
   closeOrphanOpenMeetings();
   deleteStaleEmptyMeetings();
@@ -601,6 +672,7 @@ export function startServer(): void {
     void ensureWhisperSetup();
   }
   captureEngine.start();
+  startPipeScheduler();
 
   if (AUDIO_ENABLED) {
     void startAudioRecording().then(() => {
