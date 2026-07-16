@@ -34,6 +34,13 @@ export const AUDIO_CHUNK_SEC = Number(
   process.env.SUPERAPP_AUDIO_CHUNK_SEC ?? 30
 );
 
+export const STT_ENGINE = (process.env.SUPERAPP_STT_ENGINE ?? "auto") as
+  | "auto"
+  | "whisper"
+  | "gemini";
+
+export const WHISPER_MODEL = process.env.SUPERAPP_WHISPER_MODEL ?? "base";
+
 export const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
 export const GEMINI_MODEL =

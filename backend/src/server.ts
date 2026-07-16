@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { API_HOST, API_PORT, AUDIO_ENABLED, GEMINI_MODEL } from "./config.js";
+import { API_HOST, API_PORT, AUDIO_ENABLED, GEMINI_MODEL, STT_ENGINE } from "./config.js";
 import { captureEngine } from "./capture/engine.js";
 import {
   isAudioRecording,
@@ -11,6 +11,8 @@ import {
   stopAudioRecording,
 } from "./capture/audio.js";
 import { listMonitors } from "./capture/screen.js";
+import { sttStatus } from "./capture/stt.js";
+import { ensureWhisperSetup } from "./capture/whisper.js";
 import {
   getActivitySummary,
   getFrameById,
@@ -59,6 +61,7 @@ app.get("/health", (c) => {
     uptime_seconds: Math.floor((Date.now() - startTime) / 1000),
     frames_captured: stats.framesCaptured,
     audio_chunks: stats.audioChunks,
+    stt_engine: sttStatus(),
   });
 });
 
@@ -476,6 +479,9 @@ export function startServer(): void {
   closeOrphanOpenMeetings();
   deleteStaleEmptyMeetings();
   backfillOrphanTranscriptions();
+  if (STT_ENGINE !== "gemini") {
+    void ensureWhisperSetup();
+  }
   captureEngine.start();
 
   if (AUDIO_ENABLED) {

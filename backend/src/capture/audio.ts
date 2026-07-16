@@ -10,7 +10,7 @@ import {
   closeOrphanOpenMeetings,
   createMeeting,
 } from "../db/meetings.js";
-import { transcribeAudio } from "../llm/gemini.js";
+import { transcribeChunk as transcribeChunkAudio } from "./stt.js";
 import type { AudioDeviceInfo } from "../types.js";
 
 const execFileAsync = promisify(execFile);
@@ -116,7 +116,7 @@ class AudioRecorder {
     meetingId: number | null
   ): Promise<void> {
     try {
-      const text = await transcribeAudio(filePath);
+      const text = await transcribeChunkAudio(filePath);
       const cleaned = text.trim();
       // Gemini sometimes answers "No speech detected." instead of an empty
       // string; also skip punctuation-only results.

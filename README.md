@@ -51,6 +51,8 @@ SuperApp ships with a local capture engine in `backend/` that exposes a **Screen
 - Event-driven-lite screen capture (deduped frames every ~2s)
 - Active window + app metadata (Windows/macOS)
 - Real on-screen text via Apple Vision OCR on macOS (Swift helper compiled on first run), Tesseract.js elsewhere/fallback; runs async off the capture path (`SUPERAPP_OCR_ENGINE=native|tesseract|off`)
+- Local speech-to-text via whisper.cpp (Metal-accelerated, built on first run into `~/.superapp/whisper/`; `SUPERAPP_STT_ENGINE=auto|whisper|gemini`, Gemini cloud fallback while building)
+- Meetings: audio sessions become meetings with transcripts, persisted notes, and Gemini summaries/action items
 - SQLite storage + FTS5 full-text search
 - REST API: `/health`, `/search`, `/frames`, `/vision/list`, `/audio/list`, `/engine/*`
 - Electron auto-starts the engine on launch
@@ -78,7 +80,8 @@ curl http://localhost:3030/frames?limit=20
 
 - True event-driven capture (app switches, clicks, scroll)
 - Native accessibility tree extraction (UI Automation / AX API)
-- Local Whisper audio transcription + speaker diarization
+- Speaker diarization
+- MP4 video-chunk frame storage (currently one JPEG per frame)
 - Pipes automation runtime, MCP server, semantic/embedding search
 - Integrations (Slack, Notion, Obsidian, etc.)
 
