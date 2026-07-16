@@ -15,16 +15,40 @@ export interface RecordingStatus {
   audioChunks: number;
 }
 
+export interface GeminiFunctionDeclaration {
+  name: string;
+  description: string;
+  parameters: Record<string, unknown>;
+}
+
+/** Executes a tool the model requested and returns a JSON-serializable result. */
+export type ToolExecutor = (
+  name: string,
+  args: Record<string, unknown>
+) => Promise<unknown>;
+
+interface GeminiPart {
+  text?: string;
+  functionCall?: { name: string; args?: Record<string, unknown> };
+  functionResponse?: { name: string; response: Record<string, unknown> };
+}
+
+interface GeminiContent {
+  role: string;
+  parts: GeminiPart[];
+}
+
 interface GeminiResponse {
   candidates?: Array<{
-    content?: { parts?: Array<{ text?: string }> };
+    content?: { role?: string; parts?: GeminiPart[] };
   }>;
   error?: { message?: string };
 }
 
 function buildSystemInstruction(
   contextSnippets: string[],
-  recording: RecordingStatus
+  recording: RecordingStatus,
+  hasTools = false
 ): string {
   const hasHistory = contextSnippets.length > 0;
   const statusLines = [
@@ -50,11 +74,19 @@ function buildSystemInstruction(
       : recording.framesCaptured > 0
         ? "Frames exist but no readable text was extracted from recent captures."
         : "No captures yet — the engine may have just started.",
-  ].join("\n");
+    hasTools
+      ? "You have connected tools (e.g. gmail, google calendar, slack, notion). When the user asks you to read, search, send, or create something in a connected app, call the appropriate tool instead of guessing. Use tool results to answer."
+      : "",
+  ]
+    .filter(Boolean)
+    .join("\n");
 }
 
-function toGeminiContents(messages: ChatTurn[], contextSnippets: string[] = []) {
-  const contents: Array<{ role: string; parts: Array<{ text: string }> }> = [];
+function toGeminiContents(
+  messages: ChatTurn[],
+  contextSnippets: string[] = []
+): GeminiContent[] {
+  const contents: GeminiContent[] = [];
 
   if (contextSnippets.length > 0) {
     // Caller (server.ts /chat) already truncates and budgets snippets
@@ -90,23 +122,26 @@ function toGeminiContents(messages: ChatTurn[], contextSnippets: string[] = []) 
   return contents;
 }
 
-export async function generateGeminiReply(
-  messages: ChatTurn[],
-  contextSnippets: string[] = [],
-  recording: RecordingStatus = {
-    screenRecording: false,
-    framesCaptured: 0,
-    audioRecording: false,
-    audioChunks: 0,
-  }
-): Promise<string> {
-  if (!GEMINI_API_KEY) {
-    throw new Error("GEMINI_API_KEY is not set. Add it to the project .env file.");
-  }
+export interface GenerateOptions {
+  /** Connector tools the model may call. */
+  tools?: GeminiFunctionDeclaration[];
+  /** Runs a tool the model requested; required when `tools` is non-empty. */
+  executeTool?: ToolExecutor;
+}
 
-  const conversation = messages.filter((m) => m.content.trim().length > 0);
-  if (conversation.length === 0) {
-    throw new Error("No messages to send to the model.");
+const MAX_TOOL_ITERATIONS = 5;
+
+async function callGemini(
+  systemInstruction: string,
+  contents: GeminiContent[],
+  tools: GeminiFunctionDeclaration[]
+): Promise<GeminiContent> {
+  const body: Record<string, unknown> = {
+    systemInstruction: { parts: [{ text: systemInstruction }] },
+    contents,
+  };
+  if (tools.length > 0) {
+    body.tools = [{ functionDeclarations: tools }];
   }
 
   const res = await fetch(
@@ -117,12 +152,7 @@ export async function generateGeminiReply(
         "Content-Type": "application/json",
         "x-goog-api-key": GEMINI_API_KEY,
       },
-      body: JSON.stringify({
-        systemInstruction: {
-          parts: [{ text: buildSystemInstruction(contextSnippets, recording) }],
-        },
-        contents: toGeminiContents(conversation, contextSnippets),
-      }),
+      body: JSON.stringify(body),
     }
   );
 
@@ -134,16 +164,80 @@ export async function generateGeminiReply(
     throw new Error(message);
   }
 
-  const text = data.candidates?.[0]?.content?.parts
-    ?.map((part) => part.text ?? "")
-    .join("")
-    .trim();
-
-  if (!text) {
+  const content = data.candidates?.[0]?.content;
+  if (!content?.parts) {
     throw new Error("Gemini returned an empty response.");
   }
+  return { role: content.role ?? "model", parts: content.parts };
+}
 
-  return text;
+export async function generateGeminiReply(
+  messages: ChatTurn[],
+  contextSnippets: string[] = [],
+  recording: RecordingStatus = {
+    screenRecording: false,
+    framesCaptured: 0,
+    audioRecording: false,
+    audioChunks: 0,
+  },
+  options: GenerateOptions = {}
+): Promise<string> {
+  if (!GEMINI_API_KEY) {
+    throw new Error("GEMINI_API_KEY is not set. Add it to the project .env file.");
+  }
+
+  const conversation = messages.filter((m) => m.content.trim().length > 0);
+  if (conversation.length === 0) {
+    throw new Error("No messages to send to the model.");
+  }
+
+  const tools = options.tools ?? [];
+  const systemInstruction = buildSystemInstruction(
+    contextSnippets,
+    recording,
+    tools.length > 0
+  );
+  const contents = toGeminiContents(conversation, contextSnippets);
+
+  for (let iteration = 0; iteration < MAX_TOOL_ITERATIONS; iteration++) {
+    const reply = await callGemini(systemInstruction, contents, tools);
+
+    const functionCalls = reply.parts.filter((p) => p.functionCall);
+    if (functionCalls.length === 0 || !options.executeTool) {
+      const text = reply.parts
+        .map((part) => part.text ?? "")
+        .join("")
+        .trim();
+      if (text) return text;
+      // No text and no callable tools — nothing more we can do.
+      if (functionCalls.length === 0) {
+        throw new Error("Gemini returned an empty response.");
+      }
+    }
+
+    // Record the model's tool-call turn, then execute and feed results back.
+    contents.push({ role: "model", parts: reply.parts });
+
+    const responseParts: GeminiPart[] = [];
+    for (const part of functionCalls) {
+      const call = part.functionCall!;
+      let response: Record<string, unknown>;
+      try {
+        const result = await options.executeTool!(call.name, call.args ?? {});
+        response = { result: result ?? null };
+      } catch (err) {
+        response = {
+          error: err instanceof Error ? err.message : "tool execution failed",
+        };
+      }
+      responseParts.push({
+        functionResponse: { name: call.name, response },
+      });
+    }
+    contents.push({ role: "user", parts: responseParts });
+  }
+
+  throw new Error("Gemini exceeded the maximum number of tool-call rounds.");
 }
 
 export interface MeetingSummary {

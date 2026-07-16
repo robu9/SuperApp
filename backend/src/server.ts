@@ -42,6 +42,15 @@ import {
   summarizeMeeting,
   type ChatTurn,
 } from "./llm/gemini.js";
+import { COMPOSIO_ENABLED } from "./connectors/config.js";
+import {
+  connectionStatus,
+  disconnect,
+  executeTool,
+  getGeminiTools,
+  initiateConnection,
+  listConnections,
+} from "./connectors/composio.js";
 import {
   backfillSupermemory,
   getMemoryStats,
@@ -527,12 +536,43 @@ app.post("/chat", async (c) => {
       boundedSnippets.push(snippet);
     }
 
-    const content = await generateGeminiReply(body.messages, boundedSnippets, {
-      screenRecording: engine.running && !engine.paused,
-      framesCaptured: stats.framesCaptured,
-      audioRecording: isAudioRecording(),
-      audioChunks: stats.audioChunks,
-    });
+    // Load connector tools for any actively-connected toolkits so the model can
+    // read/act in Gmail, Calendar, Slack, Notion. No-op when Composio is unset.
+    let tools: Awaited<ReturnType<typeof getGeminiTools>> = [];
+    if (COMPOSIO_ENABLED) {
+      try {
+        const connections = await listConnections();
+        const active = connections
+          .filter((conn) => conn.connected)
+          .map((conn) => conn.toolkit);
+        tools = await getGeminiTools(active);
+      } catch (err) {
+        console.warn("[chat] failed to load connector tools:", err);
+      }
+    }
+
+    const content = await generateGeminiReply(
+      body.messages,
+      boundedSnippets,
+      {
+        screenRecording: engine.running && !engine.paused,
+        framesCaptured: stats.framesCaptured,
+        audioRecording: isAudioRecording(),
+        audioChunks: stats.audioChunks,
+      },
+      tools.length > 0
+        ? {
+            tools,
+            executeTool: async (name, args) => {
+              const result = await executeTool(name, args);
+              if (!result.successful && result.error) {
+                return { error: result.error };
+              }
+              return result.data;
+            },
+          }
+        : undefined
+    );
     return c.json({ content, model: GEMINI_MODEL, provider: "gemini" });
   } catch (err) {
     return c.json(
@@ -661,6 +701,64 @@ app.post("/add", async (c) => {
   insertOcrText(frameId, body.text);
 
   return c.json({ status: "ok", frame_id: frameId });
+});
+
+app.get("/connectors", async (c) => {
+  if (!COMPOSIO_ENABLED) {
+    return c.json({ configured: false, data: [] });
+  }
+  try {
+    const data = await listConnections();
+    return c.json({ configured: true, data });
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "failed to list connectors" },
+      500
+    );
+  }
+});
+
+app.post("/connectors/:toolkit/connect", async (c) => {
+  try {
+    const toolkit = c.req.param("toolkit");
+    const result = await initiateConnection(toolkit);
+    return c.json(result);
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "failed to start connection" },
+      500
+    );
+  }
+});
+
+app.get("/connectors/:toolkit/status", async (c) => {
+  try {
+    const id = c.req.query("id");
+    if (!id) return c.json({ error: "id query param is required" }, 400);
+    const status = await connectionStatus(id);
+    return c.json(status);
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "failed to get status" },
+      500
+    );
+  }
+});
+
+app.post("/connectors/:toolkit/disconnect", async (c) => {
+  try {
+    const body = await c.req.json<{ connectedAccountId?: string }>();
+    if (!body.connectedAccountId) {
+      return c.json({ error: "connectedAccountId is required" }, 400);
+    }
+    await disconnect(body.connectedAccountId);
+    return c.json({ status: "ok" });
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "failed to disconnect" },
+      500
+    );
+  }
 });
 
 export function startServer(): void {

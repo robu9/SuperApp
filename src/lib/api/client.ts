@@ -193,6 +193,15 @@ export async function frameImageUrl(id: number): Promise<string> {
   return `${base}/frames/${id}/image`;
 }
 
+export interface ConnectorInfo {
+  toolkit: string;
+  name: string;
+  connected: boolean;
+  status: string | null;
+  connectedAccountId: string | null;
+  configured: boolean;
+}
+
 async function request<T>(
   method: string,
   path: string,
@@ -284,17 +293,23 @@ export const api = {
     request<MemoryGraphResponse>("GET", `/memory/${id}/graph?hops=${hops}`),
   memoryStats: () => request<MemoryStatsResponse>("GET", "/memory/stats"),
   createMemory: (body: { title: string; content: string; related_node_ids?: number[] }) =>
-    request<{ id: string; node: MemoryNode | null }>("POST", "/memory", body),
-  pipes: () => request<{ data: PipeListItem[] }>("GET", "/pipes"),
-  installPipe: (id: PipeId) =>
-    request<{ status: string; installed: boolean }>("POST", `/pipes/${id}/install`),
-  uninstallPipe: (id: PipeId) =>
-    request<{ status: string; installed: boolean }>("POST", `/pipes/${id}/uninstall`),
-  enablePipe: (id: PipeId, enabled = true) =>
-    request<{ status: string; enabled: boolean }>("POST", `/pipes/${id}/enable`, { enabled }),
-  runPipe: (id: PipeId) => request<PipeRunResponse>("POST", `/pipes/${id}/run`),
-  pipeLogs: (id: PipeId, limit = 10) =>
-    request<{ data: PipeRunLog[] }>("GET", `/pipes/${id}/logs?limit=${limit}`),
+    request<{ id: number; node: MemoryNode }>("POST", "/memory", body),
+  listConnectors: () =>
+    request<{ configured: boolean; data: ConnectorInfo[] }>("GET", "/connectors"),
+  connectConnector: (toolkit: string) =>
+    request<{ redirectUrl: string | null; connectedAccountId: string }>(
+      "POST",
+      `/connectors/${toolkit}/connect`
+    ),
+  connectorStatus: (toolkit: string, id: string) =>
+    request<{ status: string; connected: boolean }>(
+      "GET",
+      `/connectors/${toolkit}/status?id=${encodeURIComponent(id)}`
+    ),
+  disconnectConnector: (toolkit: string, connectedAccountId: string) =>
+    request<{ status: string }>("POST", `/connectors/${toolkit}/disconnect`, {
+      connectedAccountId,
+    }),
 };
 
 /** Load a frame screenshot for display — base64 via API first (Electron-safe), then binary URL. */

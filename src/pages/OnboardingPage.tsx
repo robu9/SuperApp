@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import {
@@ -7,6 +7,7 @@ import {
   type OnboardingStep,
 } from "@/lib/stores/onboarding-store";
 import { electron } from "@/lib/electron";
+import { api, type ConnectorInfo } from "@/lib/api/client";
 
 const STEPS: OnboardingStep[] = ["login", "permissions", "engine", "connect-apps", "pipe"];
 
@@ -136,8 +137,81 @@ function EngineSlide({ onNext }: { onNext: () => void }) {
 }
 
 function ConnectAppsSlide({ onNext }: { onNext: () => void }) {
-  const apps = ["browser extension", "calendar", "slack"];
-  const [connected, setConnected] = useState<Set<string>>(new Set());
+  const [connectors, setConnectors] = useState<ConnectorInfo[]>([]);
+  const [configured, setConfigured] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState<Set<string>>(new Set());
+  const pollers = useRef<Map<string, ReturnType<typeof setInterval>>>(new Map());
+
+  const load = async () => {
+    try {
+      const res = await api.listConnectors();
+      setConfigured(res.configured);
+      setConnectors(res.data);
+    } catch {
+      setConfigured(false);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    void load();
+    const timers = pollers.current;
+    return () => {
+      timers.forEach((t) => clearInterval(t));
+      timers.clear();
+    };
+  }, []);
+
+  const setBusyFor = (toolkit: string, on: boolean) =>
+    setBusy((prev) => {
+      const next = new Set(prev);
+      if (on) next.add(toolkit);
+      else next.delete(toolkit);
+      return next;
+    });
+
+  const handleConnect = async (conn: ConnectorInfo) => {
+    if (!conn.configured) return;
+    setBusyFor(conn.toolkit, true);
+    try {
+      const { redirectUrl, connectedAccountId } = await api.connectConnector(
+        conn.toolkit
+      );
+      if (redirectUrl) {
+        if (electron?.openExternal) await electron.openExternal(redirectUrl);
+        else window.open(redirectUrl, "_blank");
+      }
+      let attempts = 0;
+      const timer = setInterval(async () => {
+        attempts += 1;
+        try {
+          const { connected } = await api.connectorStatus(
+            conn.toolkit,
+            connectedAccountId
+          );
+          if (connected) {
+            clearInterval(timer);
+            pollers.current.delete(conn.toolkit);
+            setBusyFor(conn.toolkit, false);
+            void load();
+            return;
+          }
+        } catch {
+          // ignore transient errors during OAuth
+        }
+        if (attempts >= 40) {
+          clearInterval(timer);
+          pollers.current.delete(conn.toolkit);
+          setBusyFor(conn.toolkit, false);
+        }
+      }, 2500);
+      pollers.current.set(conn.toolkit, timer);
+    } catch {
+      setBusyFor(conn.toolkit, false);
+    }
+  };
 
   return (
     <div className="flex flex-col min-h-screen p-8 gap-6">
@@ -145,30 +219,53 @@ function ConnectAppsSlide({ onNext }: { onNext: () => void }) {
       <p className="text-sm text-muted-foreground font-mono">
         optional integrations to enrich your context.
       </p>
-      <div className="flex flex-col border border-border">
-        {apps.map((app) => (
-          <div
-            key={app}
-            className="flex items-center justify-between px-4 py-3 border-b border-border last:border-b-0"
-          >
-            <span className="font-mono text-sm lowercase">{app}</span>
-            <Button
-              variant={connected.has(app) ? "outline" : "default"}
-              size="sm"
-              onClick={() =>
-                setConnected((prev) => {
-                  const next = new Set(prev);
-                  if (next.has(app)) next.delete(app);
-                  else next.add(app);
-                  return next;
-                })
-              }
-            >
-              {connected.has(app) ? "connected" : "connect"}
-            </Button>
-          </div>
-        ))}
-      </div>
+
+      {loading && (
+        <p className="font-mono text-sm text-muted-foreground">loading…</p>
+      )}
+
+      {!loading && !configured && (
+        <p className="font-mono text-sm text-muted-foreground border border-border p-4">
+          connectors aren’t configured yet — you can set them up later from the
+          connections panel.
+        </p>
+      )}
+
+      {!loading && configured && (
+        <div className="flex flex-col border border-border">
+          {connectors.map((conn) => {
+            const isBusy = busy.has(conn.toolkit);
+            return (
+              <div
+                key={conn.toolkit}
+                className="flex items-center justify-between px-4 py-3 border-b border-border last:border-b-0"
+              >
+                <span className="font-mono text-sm lowercase">
+                  {conn.name}
+                  {!conn.configured && (
+                    <span className="text-xs text-muted-foreground ml-2">
+                      (no auth config)
+                    </span>
+                  )}
+                </span>
+                <Button
+                  variant={conn.connected ? "outline" : "default"}
+                  size="sm"
+                  disabled={isBusy || !conn.configured || conn.connected}
+                  onClick={() => handleConnect(conn)}
+                >
+                  {isBusy
+                    ? "connecting…"
+                    : conn.connected
+                      ? "connected"
+                      : "connect"}
+                </Button>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       <Button onClick={onNext} className="mt-auto">
         continue
       </Button>

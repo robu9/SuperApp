@@ -230,11 +230,12 @@ export async function getGeminiTools(
 
   for (const slug of activeToolkits) {
     const tk = getToolkit(slug);
-    if (!tk) continue;
+    if (!tk || tk.tools.length === 0) continue;
     try {
+      // Fetch the curated allowlist explicitly — fetching by `limit` alone returns
+      // tools alphabetically and would drop the important read/fetch tools.
       const tools = await composio.tools.getRawComposioTools({
-        toolkits: [tk.slug],
-        limit: tk.toolLimit,
+        tools: tk.tools,
       });
       for (const tool of tools) {
         declarations.push({
@@ -260,6 +261,10 @@ export async function executeTool(
   const result = await composio.tools.execute(slug, {
     userId: COMPOSIO_USER_ID,
     arguments: args,
+    // Use the latest toolkit version; without this Composio throws
+    // ComposioToolVersionRequiredError on execute.
+    version: "latest",
+    dangerouslySkipVersionCheck: true,
   });
   return {
     successful: result.successful,

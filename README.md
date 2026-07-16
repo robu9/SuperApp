@@ -85,6 +85,35 @@ curl http://localhost:3030/frames?limit=20
 - Pipes automation runtime, MCP server, semantic/embedding search
 - Integrations (Slack, Notion, Obsidian, etc.)
 
+## Connectors (Composio)
+
+The **Connections** panel wires real third-party apps — **Gmail, Google Calendar,
+Slack, Notion** — through [Composio](https://composio.dev) for managed OAuth. Once
+connected, the chat AI can use them as tools (e.g. "summarize my unread gmail",
+"add a 3pm calendar event", "post this to slack").
+
+### Setup
+
+**Only an API key is required.** Connectors use Composio-managed auth (Composio's
+shared OAuth apps), so the per-app auth config is created automatically the first
+time you connect — no dashboard configuration.
+
+1. Create an account at [app.composio.dev](https://app.composio.dev) and grab an API key.
+2. Add it to the project root `.env`:
+
+   ```bash
+   COMPOSIO_API_KEY=comp_...
+   ```
+
+3. Restart the app. Open **Connections**, click **connect** on an app, authorize in
+   the browser, and it flips to **connected**. Composio hosts the OAuth callback, so
+   no extra local setup is needed. Leaving `COMPOSIO_API_KEY` unset simply hides the
+   connectors and leaves chat unchanged.
+
+> Advanced: to bring your own OAuth credentials, create an auth config per app in the
+> Composio dashboard and set `COMPOSIO_AUTH_CONFIG_GMAIL` / `_GOOGLECALENDAR` /
+> `_SLACK` / `_NOTION` in `.env` to override the managed auth.
+
 ## Mock backend (legacy)
 
 Core UI interactions previously used local mock state. Search, timeline, recording status, and chat context now use the real backend when the engine is running.
