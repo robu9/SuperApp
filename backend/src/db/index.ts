@@ -27,6 +27,15 @@ export function initDatabase(): DatabaseSync {
     db.exec(`ALTER TABLE audio_transcriptions ADD COLUMN meeting_id INTEGER`);
   }
 
+  // Migration: frames predating video-chunk storage lack the pointer columns
+  const frameCols = db
+    .prepare(`PRAGMA table_info(frames)`)
+    .all() as Array<{ name: string }>;
+  if (frameCols.length > 0 && !frameCols.some((c) => c.name === "video_chunk_id")) {
+    db.exec(`ALTER TABLE frames ADD COLUMN video_chunk_id INTEGER`);
+    db.exec(`ALTER TABLE frames ADD COLUMN offset_index INTEGER`);
+  }
+
   db.exec(SCHEMA_SQL);
   return db;
 }
@@ -51,11 +60,13 @@ export function insertFrame(params: {
   monitorId: number;
   imagePath: string;
   focused: boolean;
+  videoChunkId?: number | null;
+  offsetIndex?: number | null;
 }): number {
   getDb()
     .prepare(
-      `INSERT INTO frames (timestamp, app_name, window_name, browser_url, monitor_id, image_path, focused)
-       VALUES (?, ?, ?, ?, ?, ?, ?)`
+      `INSERT INTO frames (timestamp, app_name, window_name, browser_url, monitor_id, image_path, focused, video_chunk_id, offset_index)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`
     )
     .run(
       params.timestamp,
@@ -64,9 +75,41 @@ export function insertFrame(params: {
       params.browserUrl,
       params.monitorId,
       params.imagePath,
-      params.focused ? 1 : 0
+      params.focused ? 1 : 0,
+      params.videoChunkId ?? null,
+      params.offsetIndex ?? null
     );
   return lastInsertId();
+}
+
+export function insertVideoChunk(params: {
+  filePath: string;
+  monitorId: number;
+  startedAt: string;
+}): number {
+  getDb()
+    .prepare(
+      `INSERT INTO video_chunks (file_path, monitor_id, started_at) VALUES (?, ?, ?)`
+    )
+    .run(params.filePath, params.monitorId, params.startedAt);
+  return lastInsertId();
+}
+
+export function finalizeVideoChunk(
+  id: number,
+  endedAt: string,
+  frameCount: number
+): void {
+  getDb()
+    .prepare(`UPDATE video_chunks SET ended_at = ?, frame_count = ? WHERE id = ?`)
+    .run(endedAt, frameCount, id);
+}
+
+export function getVideoChunkPath(id: number): string | null {
+  const row = getDb()
+    .prepare(`SELECT file_path FROM video_chunks WHERE id = ?`)
+    .get(id) as { file_path: string } | undefined;
+  return row?.file_path ?? null;
 }
 
 export function insertOcrText(
@@ -470,10 +513,3 @@ export function getActivitySummary(startTime: string, endTime: string) {
   };
 }
 
-export function saveFrameImage(monitorId: number | string, buffer: Buffer): string {
-  const safeId = String(monitorId).replace(/[^a-zA-Z0-9_-]/g, "_");
-  const filename = `frame_${Date.now()}_m${safeId}.jpg`;
-  const filePath = path.join(FRAMES_DIR, filename);
-  fs.writeFileSync(filePath, buffer);
-  return filePath;
-}

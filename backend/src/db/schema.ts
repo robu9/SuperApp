@@ -7,6 +7,16 @@ PRAGMA foreign_keys = ON;
 DROP TABLE IF EXISTS accessibility_text;
 DROP INDEX IF EXISTS idx_ax_frame;
 
+CREATE TABLE IF NOT EXISTS video_chunks (
+  id INTEGER PRIMARY KEY AUTOINCREMENT,
+  file_path TEXT NOT NULL,
+  monitor_id INTEGER NOT NULL DEFAULT 0,
+  started_at TEXT NOT NULL,
+  ended_at TEXT,
+  frame_count INTEGER NOT NULL DEFAULT 0,
+  created_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
 CREATE TABLE IF NOT EXISTS frames (
   id INTEGER PRIMARY KEY AUTOINCREMENT,
   timestamp TEXT NOT NULL,
@@ -15,6 +25,8 @@ CREATE TABLE IF NOT EXISTS frames (
   browser_url TEXT,
   monitor_id INTEGER NOT NULL DEFAULT 0,
   image_path TEXT NOT NULL,
+  video_chunk_id INTEGER REFERENCES video_chunks(id),
+  offset_index INTEGER,
   focused INTEGER NOT NULL DEFAULT 1,
   created_at TEXT NOT NULL DEFAULT (datetime('now'))
 );

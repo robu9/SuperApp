@@ -14,6 +14,21 @@ export const DATA_DIR =
 export const DB_PATH = path.join(DATA_DIR, "db.sqlite");
 export const FRAMES_DIR = path.join(DATA_DIR, "frames");
 export const AUDIO_DIR = path.join(DATA_DIR, "audio");
+export const VIDEO_DIR = path.join(DATA_DIR, "video");
+export const TMP_DIR = path.join(DATA_DIR, "tmp");
+
+/** Frames per MP4 chunk before rotating to a new file */
+export const VIDEO_CHUNK_MAX_FRAMES = Number(
+  process.env.SUPERAPP_VIDEO_CHUNK_FRAMES ?? 150
+);
+
+/**
+ * Stored video is downscaled to this width (never upscaled). OCR runs on the
+ * full-resolution capture before encoding, so search quality is unaffected.
+ */
+export const VIDEO_MAX_WIDTH = Number(
+  process.env.SUPERAPP_VIDEO_MAX_WIDTH ?? 1920
+);
 
 /** Capture interval in ms — event-driven lite via frame dedup */
 export const CAPTURE_INTERVAL_MS = Number(

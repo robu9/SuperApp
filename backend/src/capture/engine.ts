@@ -1,14 +1,16 @@
 import { createHash } from "crypto";
-import { CAPTURE_INTERVAL_MS } from "../config.js";
-import { insertFrame, insertOcrText, saveFrameImage } from "../db/index.js";
+import fs from "fs";
+import path from "path";
+import { CAPTURE_INTERVAL_MS, TMP_DIR } from "../config.js";
+import { insertFrame, insertOcrText } from "../db/index.js";
 import type { EngineState } from "../types.js";
 import { extractText, terminateOcr } from "./ocr.js";
 import { captureAllMonitors } from "./screen.js";
+import { cacheRecentFrame, videoChunkStore } from "./video.js";
 import { getActiveWindow } from "./window.js";
 
 interface OcrJob {
   frameId: number;
-  imagePath: string;
   buffer: Buffer;
 }
 
@@ -56,6 +58,7 @@ export class CaptureEngine {
     this.state.paused = false;
     this.ocrQueue = [];
     void terminateOcr();
+    void videoChunkStore.closeAll();
     console.log("[engine] stopped");
   }
 
@@ -87,14 +90,18 @@ export class CaptureEngine {
     try {
       while (this.ocrQueue.length > 0) {
         const job = this.ocrQueue.shift()!;
+        // Native OCR needs a file path; frames now live in video chunks,
+        // so stage the buffer in a temp file for the duration of the job.
+        const tmpPath = path.join(TMP_DIR, `ocr_${job.frameId}.jpg`);
         try {
-          const { text, confidence } = await extractText(
-            job.imagePath,
-            job.buffer
-          );
+          fs.mkdirSync(TMP_DIR, { recursive: true });
+          fs.writeFileSync(tmpPath, job.buffer);
+          const { text, confidence } = await extractText(tmpPath, job.buffer);
           if (text) insertOcrText(job.frameId, text, confidence);
         } catch (err) {
           console.error("[engine] ocr job failed:", err);
+        } finally {
+          fs.rmSync(tmpPath, { force: true });
         }
       }
     } finally {
@@ -118,19 +125,26 @@ export class CaptureEngine {
         this.lastHashes.set(monitorKey, hash);
 
         const timestamp = new Date().toISOString();
-        const imagePath = saveFrameImage(monitorId, buffer);
+        const { chunkId, offsetIndex } = await videoChunkStore.append(
+          monitorId,
+          buffer
+        );
         const frameId = insertFrame({
           timestamp,
           appName: activeWindow?.app ?? null,
           windowName: activeWindow?.title ?? null,
           browserUrl: activeWindow?.browserUrl ?? null,
           monitorId: typeof monitorId === "number" ? monitorId : 0,
-          imagePath,
+          imagePath: "",
+          videoChunkId: chunkId,
+          offsetIndex,
           focused: String(monitorId).includes("DISPLAY1") || monitorId === 0,
         });
 
+        cacheRecentFrame(frameId, buffer);
+
         // OCR runs async off the tick path so capture cadence never blocks
-        this.enqueueOcr({ frameId, imagePath, buffer });
+        this.enqueueOcr({ frameId, buffer });
 
         this.state.framesCaptured += 1;
       }

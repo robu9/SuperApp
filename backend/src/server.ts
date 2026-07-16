@@ -11,12 +11,14 @@ import {
   stopAudioRecording,
 } from "./capture/audio.js";
 import { listMonitors } from "./capture/screen.js";
+import { extractFrameJpeg, getRecentFrame } from "./capture/video.js";
 import { sttStatus } from "./capture/stt.js";
 import { ensureWhisperSetup } from "./capture/whisper.js";
 import {
   getActivitySummary,
   getFrameById,
   getFrameText,
+  getVideoChunkPath,
   getRecentContext,
   getStats,
   initDatabase,
@@ -110,15 +112,38 @@ app.get("/activity-summary", (c) => {
   return c.json(getActivitySummary(start, end));
 });
 
-app.get("/frames/:id/image", (c) => {
+/** Load a frame's pixels: video chunk extraction first, legacy JPEG fallback. */
+async function loadFrameJpeg(frame: {
+  id: number;
+  image_path: string;
+  video_chunk_id: number | null;
+  offset_index: number | null;
+}): Promise<Buffer | null> {
+  const recent = getRecentFrame(frame.id);
+  if (recent) return recent;
+  if (frame.video_chunk_id !== null && frame.offset_index !== null) {
+    const chunkPath = getVideoChunkPath(frame.video_chunk_id);
+    if (chunkPath && existsSync(chunkPath)) {
+      try {
+        return await extractFrameJpeg(chunkPath, frame.offset_index);
+      } catch (err) {
+        console.error("[server] frame extraction failed:", err);
+      }
+    }
+  }
+  if (frame.image_path && existsSync(frame.image_path)) {
+    return readFileSync(frame.image_path);
+  }
+  return null;
+}
+
+app.get("/frames/:id/image", async (c) => {
   const id = Number(c.req.param("id"));
   if (!Number.isFinite(id)) return c.json({ error: "invalid frame id" }, 400);
   const frame = getFrameById(id);
   if (!frame) return c.json({ error: "frame not found" }, 404);
-  if (!frame.image_path || !existsSync(frame.image_path)) {
-    return c.json({ error: "image not found" }, 404);
-  }
-  const buffer = readFileSync(frame.image_path);
+  const buffer = await loadFrameJpeg(frame);
+  if (!buffer) return c.json({ error: "image not found" }, 404);
   return new Response(buffer, {
     headers: {
       "Content-Type": "image/jpeg",
@@ -134,8 +159,9 @@ app.get("/frames/:id", async (c) => {
 
   const includeImage = c.req.query("include_image") === "true";
   let imageBase64: string | undefined;
-  if (includeImage && existsSync(frame.image_path)) {
-    imageBase64 = readFileSync(frame.image_path).toString("base64");
+  if (includeImage) {
+    const buffer = await loadFrameJpeg(frame);
+    if (buffer) imageBase64 = buffer.toString("base64");
   }
 
   return c.json({ ...frame, image_base64: imageBase64 });

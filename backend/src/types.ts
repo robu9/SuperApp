@@ -13,6 +13,8 @@ export interface FrameRow {
   browser_url: string | null;
   monitor_id: number;
   image_path: string;
+  video_chunk_id: number | null;
+  offset_index: number | null;
   focused: number;
   created_at: string;
 }
