@@ -103,6 +103,45 @@ export interface ChatResponse {
   provider: string;
 }
 
+export interface MemoryNode {
+  id: number;
+  type: string;
+  title: string | null;
+  content: string;
+  metadata: Record<string, unknown> | null;
+  source_type: string | null;
+  source_id: number | null;
+  app_name: string | null;
+  window_name: string | null;
+  salience: number;
+  created_at: string;
+  updated_at: string;
+}
+
+export interface MemoryGraphResponse {
+  node: MemoryNode;
+  edges: Array<{
+    id: number;
+    from_id: number;
+    to_id: number;
+    relation: string;
+    weight: number;
+    created_at: string;
+    neighbor: MemoryNode;
+  }>;
+}
+
+export interface MemoryListResponse {
+  data: MemoryNode[];
+  pagination: { limit: number; offset: number; total: number };
+}
+
+export interface MemoryStatsResponse {
+  nodes: number;
+  edges: number;
+  by_type: Record<string, number>;
+}
+
 async function getBaseUrl(): Promise<string> {
   if (electron?.getApiUrl) {
     return electron.getApiUrl();
@@ -196,6 +235,21 @@ export const api = {
       "POST",
       `/meetings/${id}/summarize`
     ),
+  memory: (params?: { q?: string; type?: string; limit?: number; offset?: number }) => {
+    const query = new URLSearchParams();
+    if (params?.q) query.set("q", params.q);
+    if (params?.type) query.set("type", params.type);
+    if (params?.limit) query.set("limit", String(params.limit));
+    if (params?.offset) query.set("offset", String(params.offset));
+    const qs = query.toString();
+    return request<MemoryListResponse>("GET", `/memory${qs ? `?${qs}` : ""}`);
+  },
+  memoryNode: (id: number) => request<MemoryNode>("GET", `/memory/${id}`),
+  memoryGraph: (id: number, hops = 2) =>
+    request<MemoryGraphResponse>("GET", `/memory/${id}/graph?hops=${hops}`),
+  memoryStats: () => request<MemoryStatsResponse>("GET", "/memory/stats"),
+  createMemory: (body: { title: string; content: string; related_node_ids?: number[] }) =>
+    request<{ id: number; node: MemoryNode }>("POST", "/memory", body),
 };
 
 /** Load a frame screenshot for display — base64 via API first (Electron-safe), then binary URL. */

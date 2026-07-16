@@ -42,6 +42,17 @@ import {
   summarizeMeeting,
   type ChatTurn,
 } from "./llm/gemini.js";
+import {
+  backfillSupermemory,
+  getMemoryStats,
+  getNode,
+  getNodeGraph,
+  ingestMeetingSummary,
+  ingestUserMemory,
+  initSupermemory,
+  listNodes,
+  retrieveContextForChat,
+} from "./memory/index.js";
 
 const app = new Hono();
 const startTime = Date.now();
@@ -335,6 +346,13 @@ app.post("/meetings/:id/summarize", async (c) => {
       ...(meeting.title ? {} : { title: result.title }),
     });
 
+    ingestMeetingSummary({
+      meetingId: id,
+      title: meeting.title ?? result.title,
+      summary: result.summary,
+      actionItems: result.action_items,
+    });
+
     return c.json({
       title: meeting.title ?? result.title,
       summary: result.summary,
@@ -386,31 +404,38 @@ app.post("/chat", async (c) => {
     const stats = getStats();
     const engine = captureEngine.state;
 
-    // Always include recent screen + audio context (not keyword-dependent)
-    let recent = getRecentContext(8);
-    if (recent.length === 0 && stats.framesCaptured > 0) {
-      recent = getRecentContext(8);
-    }
-    const contextSnippets: string[] = recent.map((item) => {
-      const sourceLabel = item.source === "audio" ? "[audio]" : "[screen]";
-      const parts = [
-        sourceLabel,
-        item.app_name ? `[${item.app_name}]` : null,
-        item.window_name ? `"${item.window_name}"` : null,
-        item.text.slice(0, 1500),
-      ].filter(Boolean);
-      return parts.join(" ");
-    });
-
     const lastUserMessage = [...body.messages]
       .reverse()
       .find((message) => message.role === "user")?.content;
 
-    const searchQuery = body.context_query ?? lastUserMessage;
-    if (searchQuery?.trim() && searchQuery.trim().length > 2) {
+    const searchQuery = body.context_query ?? lastUserMessage ?? "";
+    const CONTEXT_BUDGET = 24_000;
+
+    const { snippets: memorySnippets } = retrieveContextForChat(
+      searchQuery,
+      CONTEXT_BUDGET
+    );
+
+    const contextSnippets = [...memorySnippets];
+
+    if (contextSnippets.length === 0) {
+      const recent = getRecentContext(8);
+      for (const item of recent) {
+        const sourceLabel = item.source === "audio" ? "[audio]" : "[screen]";
+        const parts = [
+          sourceLabel,
+          item.app_name ? `[${item.app_name}]` : null,
+          item.window_name ? `"${item.window_name}"` : null,
+          item.text.slice(0, 1500),
+        ].filter(Boolean);
+        contextSnippets.push(parts.join(" "));
+      }
+    }
+
+    if (searchQuery.trim().length > 2) {
       const { data } = searchContent({
         q: searchQuery,
-        limit: 8,
+        limit: 4,
         offset: 0,
         contentType: "all",
       });
@@ -424,8 +449,6 @@ app.post("/chat", async (c) => {
       }
     }
 
-    // Total context budget so Gemini requests stay bounded
-    const CONTEXT_BUDGET = 24_000;
     let budget = 0;
     const boundedSnippets: string[] = [];
     for (const snippet of contextSnippets) {
@@ -444,6 +467,73 @@ app.post("/chat", async (c) => {
   } catch (err) {
     return c.json(
       { error: err instanceof Error ? err.message : "chat request failed" },
+      500
+    );
+  }
+});
+
+app.get("/memory/stats", (c) => {
+  return c.json(getMemoryStats());
+});
+
+app.get("/memory", (c) => {
+  const q = c.req.query("q");
+  const type = c.req.query("type");
+  const limit = Number(c.req.query("limit") ?? 50);
+  const offset = Number(c.req.query("offset") ?? 0);
+
+  const { data, total } = listNodes({
+    q: q ?? undefined,
+    type: type as import("./memory/types.js").MemoryNodeType | undefined,
+    limit,
+    offset,
+  });
+
+  return c.json({
+    data,
+    pagination: { limit, offset, total },
+  });
+});
+
+app.get("/memory/:id", (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "invalid memory id" }, 400);
+  const node = getNode(id);
+  if (!node) return c.json({ error: "memory not found" }, 404);
+  return c.json(node);
+});
+
+app.get("/memory/:id/graph", (c) => {
+  const id = Number(c.req.param("id"));
+  if (!Number.isFinite(id)) return c.json({ error: "invalid memory id" }, 400);
+  const hops = Number(c.req.query("hops") ?? 2);
+  const graph = getNodeGraph(id, hops);
+  if (!graph) return c.json({ error: "memory not found" }, 404);
+  return c.json(graph);
+});
+
+app.post("/memory", async (c) => {
+  try {
+    const body = await c.req.json<{
+      title: string;
+      content: string;
+      related_node_ids?: number[];
+    }>();
+
+    if (!body.title?.trim() || !body.content?.trim()) {
+      return c.json({ error: "title and content are required" }, 400);
+    }
+
+    const id = ingestUserMemory({
+      title: body.title,
+      content: body.content,
+      relatedNodeIds: body.related_node_ids,
+    });
+
+    return c.json({ id, node: getNode(id) });
+  } catch (err) {
+    return c.json(
+      { error: err instanceof Error ? err.message : "memory create failed" },
       500
     );
   }
@@ -502,6 +592,8 @@ app.post("/add", async (c) => {
 
 export function startServer(): void {
   initDatabase();
+  initSupermemory();
+  void backfillSupermemory();
   closeOrphanOpenMeetings();
   deleteStaleEmptyMeetings();
   backfillOrphanTranscriptions();

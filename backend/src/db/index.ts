@@ -130,6 +130,18 @@ export function insertOcrText(
     appName: getFrameAppName(frameId),
     windowName: getFrameWindowName(frameId),
   });
+
+  void import("../memory/index.js")
+    .then(({ ingestScreenCapture }) =>
+      ingestScreenCapture({
+        frameId,
+        text,
+        appName: getFrameAppName(frameId),
+        windowName: getFrameWindowName(frameId),
+        timestamp: getFrameTimestamp(frameId) ?? new Date().toISOString(),
+      })
+    )
+    .catch(() => {});
 }
 
 export function insertAudioTranscription(params: {
@@ -162,6 +174,18 @@ export function insertAudioTranscription(params: {
     appName: null,
     windowName: null,
   });
+
+  void import("../memory/index.js")
+    .then(({ ingestAudioChunk }) =>
+      ingestAudioChunk({
+        audioId,
+        transcription: params.transcription,
+        meetingId: params.meetingId,
+        timestamp: params.timestamp,
+      })
+    )
+    .catch(() => {});
+
   return audioId;
 }
 
