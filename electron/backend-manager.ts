@@ -90,14 +90,14 @@ async function backendHasChatRoute(): Promise<boolean> {
   }
 }
 
-async function killProcessOnPort(port: number): Promise<void> {
+async function getPidsOnPort(port: number): Promise<number[]> {
   try {
     let stdout: string;
     if (process.platform === "win32") {
       ({ stdout } = await execFileAsync("powershell", [
         "-NoProfile",
         "-Command",
-        `(Get-NetTCPConnection -LocalPort ${port} -ErrorAction SilentlyContinue).OwningProcess | Select-Object -Unique`,
+        `(Get-NetTCPConnection -LocalPort ${port} -State Listen -ErrorAction SilentlyContinue).OwningProcess | Select-Object -Unique`,
       ]));
     } else {
       ({ stdout } = await execFileAsync("lsof", [
@@ -106,37 +106,63 @@ async function killProcessOnPort(port: number): Promise<void> {
         "-sTCP:LISTEN",
       ]).catch(() => ({ stdout: "" })));
     }
-    const pids = stdout
+    return stdout
       .trim()
       .split(/\r?\n/)
       .map((line) => Number(line.trim()))
       .filter((pid) => Number.isFinite(pid) && pid > 0);
-
-    for (const pid of pids) {
-      if (pid === process.pid) continue;
-      try {
-        process.kill(pid, "SIGTERM");
-      } catch {
-        // already gone
-      }
-    }
-    if (pids.length > 0) {
-      await new Promise((r) => setTimeout(r, 1000));
-    }
   } catch {
-    // ignore
+    return [];
   }
 }
 
-export async function startBackend(): Promise<void> {
-  // In dev, always restart so backend TypeScript changes are picked up.
-  if (!app.isPackaged) {
-    if (backendProcess && !backendProcess.killed) {
-      backendProcess.kill("SIGTERM");
-      backendProcess = null;
+async function waitForPortFree(
+  port: number,
+  maxAttempts = 40
+): Promise<void> {
+  for (let i = 0; i < maxAttempts; i++) {
+    const pids = await getPidsOnPort(port);
+    if (pids.length === 0) return;
+    await new Promise((r) => setTimeout(r, 250));
+  }
+}
+
+async function killProcessOnPort(port: number): Promise<void> {
+  const pids = await getPidsOnPort(port);
+
+  for (const pid of pids) {
+    if (pid === process.pid) continue;
+    try {
+      if (process.platform === "win32") {
+        await execFileAsync("taskkill", ["/PID", String(pid), "/F", "/T"]);
+      } else {
+        process.kill(pid, "SIGTERM");
+      }
+    } catch {
+      // already gone
     }
-    await killProcessOnPort(API_PORT);
-  } else if (backendProcess && !backendProcess.killed) {
+  }
+  if (pids.length > 0) {
+    await new Promise((r) => setTimeout(r, 1000));
+  }
+  await waitForPortFree(port);
+}
+
+export async function startBackend(): Promise<void> {
+  // In dev, scripts/dev.mjs owns the backend process. Electron only connects so
+  // main-process hot-reload does not kill ffmpeg/audio children on Windows.
+  if (!app.isPackaged) {
+    await waitForHealth(60);
+    const chatReady = await backendHasChatRoute();
+    if (!chatReady) {
+      throw new Error(
+        "Backend not reachable on port 3030. Ensure `npm run dev` started the backend."
+      );
+    }
+    return;
+  }
+
+  if (backendProcess && !backendProcess.killed) {
     const hasChat = await backendHasChatRoute();
     if (hasChat) {
       await waitForHealth(5);
@@ -147,9 +173,7 @@ export async function startBackend(): Promise<void> {
   }
 
   const hasChat = await backendHasChatRoute();
-  if (!app.isPackaged) {
-    // Port cleared above — always spawn fresh in dev.
-  } else if (hasChat) {
+  if (hasChat) {
     await waitForHealth(5);
     return;
   } else {
@@ -194,6 +218,7 @@ export async function startBackend(): Promise<void> {
 }
 
 export function stopBackend(): void {
+  if (!app.isPackaged) return;
   if (backendProcess && !backendProcess.killed) {
     backendProcess.kill("SIGTERM");
     backendProcess = null;

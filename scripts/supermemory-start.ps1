@@ -3,8 +3,11 @@
 
 $ErrorActionPreference = "Stop"
 
-$projectPath = (Get-Location).Path
-$wslPath = wsl wslpath -u $projectPath
+$projectPath = (Resolve-Path (Get-Location)).Path
+$wslPath = (wsl.exe -e wslpath -u "$projectPath" 2>$null).Trim()
+if (-not $wslPath) {
+    throw "Failed to convert project path to WSL: $projectPath"
+}
 
 Write-Host "Starting supermemory-server in WSL..."
 Write-Host "Data dir: $projectPath\.supermemory"

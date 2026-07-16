@@ -56,6 +56,10 @@ if (isWin) {
   ]);
 }
 
+// Run the capture API outside Electron so main-process hot-reload does not
+// restart ffmpeg/audio subprocesses (taskkill /T on Windows often fails).
+run("backend", "npm", ["run", "backend:dev"], { fatal: true });
+
 const app = run("app", "npx", ["vite"], { fatal: true });
 app.on("exit", (code) => shutdown(code ?? 0));
 
