@@ -1,115 +1,102 @@
-import {
-  createMemoryNode,
-  findNodeBySource,
-  getLatestChunkNode,
-  initSupermemory,
-  linkNodes,
-  updateMemoryNode,
-  upsertAppNode,
-} from "./graph.js";
+import { SUPERMEMORY_CONTAINER_TAG } from "../config.js";
+import { getSupermemoryClient } from "./client.js";
 
 function titleFromContent(content: string, max = 60): string {
   const line = content.split("\n").find((part) => part.trim().length > 0) ?? content;
   return line.trim().slice(0, max).toLowerCase();
 }
 
-export function ingestScreenCapture(params: {
+async function addDocument(params: {
+  content: string;
+  customId: string;
+  title?: string;
+  metadata?: Record<string, string | number | boolean | string[]>;
+}): Promise<string | null> {
+  try {
+    const client = getSupermemoryClient();
+    const response = await client.add({
+      content: params.content,
+      containerTag: SUPERMEMORY_CONTAINER_TAG,
+      customId: params.customId,
+      metadata: {
+        title: params.title ?? titleFromContent(params.content),
+        ...params.metadata,
+      },
+    });
+    return response.id;
+  } catch (err) {
+    console.warn("[supermemory] ingest failed:", err);
+    return null;
+  }
+}
+
+export async function ingestScreenCapture(params: {
   frameId: number;
   text: string;
   appName: string | null;
   windowName: string | null;
   timestamp: string;
-}): number | null {
+}): Promise<string | null> {
   const text = params.text.trim();
   if (!text) return null;
 
-  initSupermemory();
+  const title = params.windowName ?? params.appName ?? titleFromContent(text);
+  const header = [
+    "[screen]",
+    params.appName ? `[${params.appName}]` : null,
+    params.windowName ? `"${params.windowName}"` : null,
+  ]
+    .filter(Boolean)
+    .join(" ");
 
-  const nodeId = createMemoryNode({
-    type: "screen_chunk",
-    title: params.windowName ?? params.appName ?? titleFromContent(text),
-    content: text,
-    sourceType: "frame",
-    sourceId: params.frameId,
-    appName: params.appName,
-    windowName: params.windowName,
-    salience: 0.55,
-    createdAt: params.timestamp,
-    metadata: { frame_id: params.frameId },
+  return addDocument({
+    customId: `frame_${params.frameId}`,
+    title,
+    content: `${header}\n${text}`,
+    metadata: {
+      superapp_type: "screen_chunk",
+      source_type: "frame",
+      source_id: params.frameId,
+      app_name: params.appName ?? "",
+      window_name: params.windowName ?? "",
+      salience: 0.55,
+      created_at: params.timestamp,
+    },
   });
-
-  if (params.appName) {
-    const appId = upsertAppNode(params.appName);
-    linkNodes(nodeId, appId, "captured_in", 1);
-  }
-
-  const previous = getLatestChunkNode("screen_chunk", params.appName);
-  if (previous && previous.id !== nodeId) {
-    linkNodes(previous.id, nodeId, "follows", 0.9);
-  }
-
-  return nodeId;
 }
 
-export function ingestAudioChunk(params: {
+export async function ingestAudioChunk(params: {
   audioId: number;
   transcription: string;
   meetingId?: number | null;
   timestamp: string;
-}): number | null {
+}): Promise<string | null> {
   const text = params.transcription.trim();
   if (!text) return null;
 
-  initSupermemory();
-
-  const nodeId = createMemoryNode({
-    type: "audio_chunk",
+  return addDocument({
+    customId: `audio_${params.audioId}`,
     title: titleFromContent(text),
-    content: text,
-    sourceType: "audio",
-    sourceId: params.audioId,
-    salience: 0.65,
-    createdAt: params.timestamp,
+    content: `[audio]\n${text}`,
     metadata: {
-      audio_id: params.audioId,
-      meeting_id: params.meetingId ?? null,
+      superapp_type: "audio_chunk",
+      source_type: "audio",
+      source_id: params.audioId,
+      meeting_id: params.meetingId ?? 0,
+      salience: 0.65,
+      created_at: params.timestamp,
     },
   });
-
-  if (params.meetingId) {
-    const meetingNode = findNodeBySource("meeting", params.meetingId);
-    if (meetingNode) {
-      linkNodes(nodeId, meetingNode.id, "spoken_in", 1);
-    } else {
-      const meetingNodeId = createMemoryNode({
-        type: "meeting",
-        title: `meeting #${params.meetingId}`,
-        content: `audio meeting session ${params.meetingId}`,
-        sourceType: "meeting",
-        sourceId: params.meetingId,
-        salience: 0.7,
-      });
-      linkNodes(nodeId, meetingNodeId, "spoken_in", 1);
-    }
-  }
-
-  const previous = getLatestChunkNode("audio_chunk");
-  if (previous && previous.id !== nodeId) {
-    linkNodes(previous.id, nodeId, "follows", 0.85);
-  }
-
-  return nodeId;
 }
 
-export function ingestMeetingSummary(params: {
+export async function ingestMeetingSummary(params: {
   meetingId: number;
   title: string;
   summary: string;
   actionItems: string[];
-}): number {
-  initSupermemory();
-
+}): Promise<string | null> {
   const content = [
+    `[meeting] ${params.title}`,
     params.summary,
     params.actionItems.length > 0
       ? `action items:\n${params.actionItems.map((item) => `- ${item}`).join("\n")}`
@@ -118,60 +105,32 @@ export function ingestMeetingSummary(params: {
     .filter(Boolean)
     .join("\n\n");
 
-  const existing = findNodeBySource("meeting", params.meetingId);
-  const meetingNodeId =
-    existing?.id ??
-    createMemoryNode({
-      type: "meeting",
-      title: params.title,
-      content,
-      sourceType: "meeting",
-      sourceId: params.meetingId,
-      salience: 0.85,
-    });
-
-  if (existing) {
-    updateMemoryNode(meetingNodeId, {
-      title: params.title,
-      content,
+  return addDocument({
+    customId: `meeting_${params.meetingId}`,
+    title: params.title.toLowerCase(),
+    content,
+    metadata: {
+      superapp_type: "meeting",
+      source_type: "meeting",
+      source_id: params.meetingId,
       salience: 0.9,
-    });
-  }
-
-  for (const item of params.actionItems) {
-    const taskId = createMemoryNode({
-      type: "task",
-      title: item.slice(0, 80).toLowerCase(),
-      content: item,
-      salience: 0.8,
-      metadata: { meeting_id: params.meetingId },
-    });
-    linkNodes(meetingNodeId, taskId, "contains", 1);
-  }
-
-  return meetingNodeId;
+    },
+  });
 }
 
-export function ingestUserMemory(params: {
+export async function ingestUserMemory(params: {
   title: string;
   content: string;
-  relatedNodeIds?: number[];
-}): number {
-  initSupermemory();
-
-  const nodeId = createMemoryNode({
-    type: "memory",
+}): Promise<string | null> {
+  return addDocument({
+    customId: `user_${Date.now()}`,
     title: params.title.toLowerCase(),
-    content: params.content,
-    sourceType: "user",
-    sourceId: null,
-    salience: 0.95,
-    metadata: { pinned: true },
+    content: `[memory] ${params.title}\n${params.content}`,
+    metadata: {
+      superapp_type: "memory",
+      source_type: "user",
+      salience: 0.95,
+      pinned: true,
+    },
   });
-
-  for (const relatedId of params.relatedNodeIds ?? []) {
-    linkNodes(nodeId, relatedId, "related_to", 1);
-  }
-
-  return nodeId;
 }

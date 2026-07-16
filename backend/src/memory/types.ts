@@ -5,7 +5,8 @@ export type MemoryNodeType =
   | "meeting"
   | "task"
   | "memory"
-  | "topic";
+  | "topic"
+  | "document";
 
 export type MemorySourceType = "frame" | "audio" | "meeting" | "user";
 
@@ -20,7 +21,7 @@ export type MemoryRelation =
   | "derived_from";
 
 export interface MemoryNode {
-  id: number;
+  id: string;
   type: MemoryNodeType;
   title: string | null;
   content: string;
@@ -35,9 +36,9 @@ export interface MemoryNode {
 }
 
 export interface MemoryEdge {
-  id: number;
-  from_id: number;
-  to_id: number;
+  id: string;
+  from_id: string;
+  to_id: string;
   relation: MemoryRelation;
   weight: number;
   created_at: string;

@@ -26,7 +26,7 @@ export function BrainSection() {
   const [stats, setStats] = useState<{ nodes: number; edges: number } | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [selectedId, setSelectedId] = useState<number | null>(null);
+  const [selectedId, setSelectedId] = useState<string | null>(null);
   const [graph, setGraph] = useState<MemoryGraphResponse | null>(null);
   const [graphLoading, setGraphLoading] = useState(false);
 
@@ -79,7 +79,7 @@ export function BrainSection() {
       <div className="px-8 py-6 border-b border-border">
         <h1 className="text-2xl font-mono lowercase">brain</h1>
         <p className="text-sm text-muted-foreground font-mono mt-1">
-          supermemory graph — {stats ? `${stats.nodes} nodes · ${stats.edges} edges` : "loading..."}
+          official supermemory local — {stats ? `${stats.nodes} memories` : "loading..."}
         </p>
       </div>
 

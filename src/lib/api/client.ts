@@ -104,7 +104,7 @@ export interface ChatResponse {
 }
 
 export interface MemoryNode {
-  id: number;
+  id: string;
   type: string;
   title: string | null;
   content: string;
@@ -121,9 +121,9 @@ export interface MemoryNode {
 export interface MemoryGraphResponse {
   node: MemoryNode;
   edges: Array<{
-    id: number;
-    from_id: number;
-    to_id: number;
+    id: string;
+    from_id: string;
+    to_id: string;
     relation: string;
     weight: number;
     created_at: string;
@@ -279,12 +279,12 @@ export const api = {
     const qs = query.toString();
     return request<MemoryListResponse>("GET", `/memory${qs ? `?${qs}` : ""}`);
   },
-  memoryNode: (id: number) => request<MemoryNode>("GET", `/memory/${id}`),
-  memoryGraph: (id: number, hops = 2) =>
+  memoryNode: (id: string) => request<MemoryNode>("GET", `/memory/${id}`),
+  memoryGraph: (id: string, hops = 2) =>
     request<MemoryGraphResponse>("GET", `/memory/${id}/graph?hops=${hops}`),
   memoryStats: () => request<MemoryStatsResponse>("GET", "/memory/stats"),
   createMemory: (body: { title: string; content: string; related_node_ids?: number[] }) =>
-    request<{ id: number; node: MemoryNode }>("POST", "/memory", body),
+    request<{ id: string; node: MemoryNode | null }>("POST", "/memory", body),
   pipes: () => request<{ data: PipeListItem[] }>("GET", "/pipes"),
   installPipe: (id: PipeId) =>
     request<{ status: string; installed: boolean }>("POST", `/pipes/${id}/install`),

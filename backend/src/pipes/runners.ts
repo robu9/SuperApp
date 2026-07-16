@@ -14,7 +14,6 @@ import {
   generateFocusReport,
   summarizeMeeting,
 } from "../llm/gemini.js";
-import { createMemoryNode, initSupermemory, linkNodes } from "../memory/graph.js";
 import { ingestMeetingSummary, ingestUserMemory } from "../memory/ingest.js";
 import type { PipeId } from "./definitions.js";
 
@@ -197,27 +196,10 @@ async function runActionItems(): Promise<string> {
     return result.summary || "no action items found in recent context";
   }
 
-  initSupermemory();
-  const parentId = createMemoryNode({
-    type: "memory",
+  await ingestUserMemory({
     title: "extracted action items",
     content: [result.summary, ...result.action_items.map((item) => `- ${item}`)].join("\n"),
-    sourceType: "user",
-    sourceId: null,
-    salience: 0.85,
-    metadata: { pipe: "action-items" },
   });
-
-  for (const item of result.action_items) {
-    const taskId = createMemoryNode({
-      type: "task",
-      title: item.slice(0, 80).toLowerCase(),
-      content: item,
-      salience: 0.8,
-      metadata: { pipe: "action-items" },
-    });
-    linkNodes(parentId, taskId, "contains", 1);
-  }
 
   return [
     result.summary,

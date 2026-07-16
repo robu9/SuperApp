@@ -60,3 +60,16 @@ export const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
 export const GEMINI_MODEL =
   process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+
+/** Official Supermemory local server — see https://supermemory.ai/docs/self-hosting/overview */
+export const SUPERMEMORY_BASE_URL =
+  process.env.SUPERMEMORY_BASE_URL ??
+  process.env.SUPERMEMORY_LOCAL_URL ??
+  "http://127.0.0.1:6767";
+
+/** Bearer token printed on first `supermemory-server` boot */
+export const SUPERMEMORY_API_KEY = process.env.SUPERMEMORY_API_KEY ?? "";
+
+/** Scopes all SuperApp memories to one container */
+export const SUPERMEMORY_CONTAINER_TAG =
+  process.env.SUPERMEMORY_CONTAINER_TAG ?? "superapp";

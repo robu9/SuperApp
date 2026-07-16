@@ -17,6 +17,7 @@
     "hono": "^4.7.10",
     "screenshot-desktop": "^1.15.1",
     "sharp": "^0.33.5",
+    "supermemory": "^4.24.12",
     "tesseract.js": "^6.0.1"
   },
   "devDependencies": {

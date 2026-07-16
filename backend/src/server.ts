@@ -481,7 +481,7 @@ app.post("/chat", async (c) => {
     const searchQuery = body.context_query ?? lastUserMessage ?? "";
     const CONTEXT_BUDGET = 24_000;
 
-    const { snippets: memorySnippets } = retrieveContextForChat(
+    const { snippets: memorySnippets } = await retrieveContextForChat(
       searchQuery,
       CONTEXT_BUDGET
     );
@@ -542,17 +542,17 @@ app.post("/chat", async (c) => {
   }
 });
 
-app.get("/memory/stats", (c) => {
-  return c.json(getMemoryStats());
+app.get("/memory/stats", async (c) => {
+  return c.json(await getMemoryStats());
 });
 
-app.get("/memory", (c) => {
+app.get("/memory", async (c) => {
   const q = c.req.query("q");
   const type = c.req.query("type");
   const limit = Number(c.req.query("limit") ?? 50);
   const offset = Number(c.req.query("offset") ?? 0);
 
-  const { data, total } = listNodes({
+  const { data, total } = await listNodes({
     q: q ?? undefined,
     type: type as import("./memory/types.js").MemoryNodeType | undefined,
     limit,
@@ -565,19 +565,19 @@ app.get("/memory", (c) => {
   });
 });
 
-app.get("/memory/:id", (c) => {
-  const id = Number(c.req.param("id"));
-  if (!Number.isFinite(id)) return c.json({ error: "invalid memory id" }, 400);
-  const node = getNode(id);
+app.get("/memory/:id", async (c) => {
+  const id = c.req.param("id");
+  if (!id.trim()) return c.json({ error: "invalid memory id" }, 400);
+  const node = await getNode(id);
   if (!node) return c.json({ error: "memory not found" }, 404);
   return c.json(node);
 });
 
-app.get("/memory/:id/graph", (c) => {
-  const id = Number(c.req.param("id"));
-  if (!Number.isFinite(id)) return c.json({ error: "invalid memory id" }, 400);
+app.get("/memory/:id/graph", async (c) => {
+  const id = c.req.param("id");
+  if (!id.trim()) return c.json({ error: "invalid memory id" }, 400);
   const hops = Number(c.req.query("hops") ?? 2);
-  const graph = getNodeGraph(id, hops);
+  const graph = await getNodeGraph(id, hops);
   if (!graph) return c.json({ error: "memory not found" }, 404);
   return c.json(graph);
 });
@@ -587,20 +587,23 @@ app.post("/memory", async (c) => {
     const body = await c.req.json<{
       title: string;
       content: string;
-      related_node_ids?: number[];
     }>();
 
     if (!body.title?.trim() || !body.content?.trim()) {
       return c.json({ error: "title and content are required" }, 400);
     }
 
-    const id = ingestUserMemory({
+    const id = await ingestUserMemory({
       title: body.title,
       content: body.content,
-      relatedNodeIds: body.related_node_ids,
     });
 
-    return c.json({ id, node: getNode(id) });
+    if (!id) {
+      return c.json({ error: "supermemory local server unavailable" }, 503);
+    }
+
+    const node = await getNode(id);
+    return c.json({ id, node });
   } catch (err) {
     return c.json(
       { error: err instanceof Error ? err.message : "memory create failed" },
