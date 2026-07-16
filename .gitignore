@@ -15,4 +15,5 @@ Untitled*
 *.log
 .DS_Store
 Thumbs.db
-screenpipe/
+.supermemory/
+backend/eng.traineddata

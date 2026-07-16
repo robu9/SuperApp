@@ -5,7 +5,8 @@
   "main": "dist-electron/main.js",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "node scripts/dev.mjs",
+    "memory:start:local": "node scripts/dev-memory-start.mjs",
     "build": "npm run backend:build && tsc && vite build && electron-builder",
     "preview": "vite preview",
     "electron:dev": "vite",
@@ -15,7 +16,7 @@
     "backend:build": "npm run build --prefix backend",
     "memory:install": "npx supermemory local install",
     "memory:start": "npx supermemory local start --port 6767",
-    "memory:start:wsl": "wsl ~/.local/bin/supermemory-server",
+    "memory:start:wsl": "powershell -ExecutionPolicy Bypass -File scripts/supermemory-start.ps1",
     "memory:status": "npx supermemory local status --url http://127.0.0.1:6767",
     "memory:install:wsl": "powershell -ExecutionPolicy Bypass -File scripts/supermemory-wsl.ps1",
     "postinstall": "npm run backend:install"
