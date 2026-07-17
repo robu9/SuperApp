@@ -18,7 +18,7 @@ function formatDate(iso: string): string {
 }
 
 function nodeLabel(node: MemoryNode): string {
-  return (node.title ?? node.content.slice(0, 80)).toLowerCase();
+  return node.title ?? node.content.slice(0, 80);
 }
 
 function Section({
@@ -32,15 +32,15 @@ function Section({
 }) {
   const [open, setOpen] = useState(defaultOpen);
   return (
-    <div className="border border-border">
+    <div className="rounded-md border border-border">
       <button
         type="button"
         onClick={() => setOpen((v) => !v)}
-        className="w-full flex items-center justify-between px-3 py-2 hover:bg-accent transition-colors duration-150"
+        className="w-full flex items-center justify-between px-3 py-2 hover:bg-accent transition-colors duration-150 rounded-md"
       >
-        <span className="text-[10px] font-mono uppercase tracking-wide">{title}</span>
+        <span className="text-xs font-medium text-foreground">{title}</span>
         <ChevronDown
-          className={cn("w-3.5 h-3.5 transition-transform duration-150", open && "rotate-180")}
+          className={cn("w-3.5 h-3.5 text-muted-foreground transition-transform duration-150", open && "rotate-180")}
         />
       </button>
       {open && <div className="px-3 pb-3 pt-1 flex flex-col gap-2">{children}</div>}
@@ -50,9 +50,9 @@ function Section({
 
 function Row({ label, value }: { label: string; value: string }) {
   return (
-    <div className="flex items-start justify-between gap-3 text-xs font-mono">
-      <span className="text-muted-foreground uppercase tracking-wide shrink-0">{label}</span>
-      <span className="text-right lowercase break-words">{value}</span>
+    <div className="flex items-start justify-between gap-3 text-xs">
+      <span className="text-muted-foreground shrink-0">{label}</span>
+      <span className="text-right break-words">{value}</span>
     </div>
   );
 }
@@ -81,16 +81,16 @@ export function MemoryNodeDetail({
   return (
     <div
       className={cn(
-        "flex flex-col border border-border bg-background/95 backdrop-blur-sm shadow-sm",
+        "flex flex-col rounded-lg border border-border bg-background/95 backdrop-blur-sm shadow-md",
         pinned ? "h-full" : "max-h-[min(70vh,520px)]"
       )}
     >
       <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-3 shrink-0">
         <div className="min-w-0 flex-1">
-          <span className="inline-block text-[10px] font-mono uppercase tracking-wide border border-foreground px-2 py-0.5 mb-2">
+          <span className="inline-block text-xs font-medium rounded-full border border-border px-2 py-0.5 mb-2 text-muted-foreground capitalize">
             {node.type.replace(/_/g, " ")}
           </span>
-          <p className="font-mono text-sm lowercase leading-snug">{nodeLabel(node)}</p>
+          <p className="text-sm font-medium leading-snug">{nodeLabel(node)}</p>
         </div>
         {pinned && onClose && (
           <Button variant="ghost" size="icon" className="h-7 w-7 shrink-0" onClick={onClose}>
@@ -100,31 +100,31 @@ export function MemoryNodeDetail({
       </div>
 
       <div className="overflow-y-auto scrollbar-minimal p-4 flex flex-col gap-3">
-        <p className="text-sm font-mono text-muted-foreground leading-relaxed">
+        <p className="text-sm text-muted-foreground leading-relaxed">
           {node.content.slice(0, 1200)}
-          {node.content.length > 1200 ? "..." : ""}
+          {node.content.length > 1200 ? "…" : ""}
         </p>
 
-        <Section title="source">
-          <p className="text-xs font-mono text-muted-foreground lowercase leading-relaxed">
-            {node.title ?? "extracted memory from supermemory local"}
+        <Section title="Source">
+          <p className="text-xs text-muted-foreground leading-relaxed">
+            {node.title ?? "Extracted memory from SuperMemory local"}
           </p>
         </Section>
 
-        <Section title="provenance">
-          <Row label="created" value={formatDate(node.created_at)} />
-          <Row label="updated" value={formatDate(node.updated_at)} />
-          {node.app_name && <Row label="app" value={node.app_name} />}
-          {node.window_name && <Row label="window" value={node.window_name} />}
-          {node.source_type && <Row label="source" value={node.source_type} />}
-          <Row label="salience" value={node.salience.toFixed(2)} />
+        <Section title="Provenance">
+          <Row label="Created" value={formatDate(node.created_at)} />
+          <Row label="Updated" value={formatDate(node.updated_at)} />
+          {node.app_name && <Row label="App" value={node.app_name} />}
+          {node.window_name && <Row label="Window" value={node.window_name} />}
+          {node.source_type && <Row label="Source" value={node.source_type} />}
+          <Row label="Salience" value={node.salience.toFixed(2)} />
         </Section>
 
-        <Section title="relations" defaultOpen={connections.length > 0}>
+        <Section title="Relations" defaultOpen={connections.length > 0}>
           {connections.length === 0 ? (
-            <p className="text-xs font-mono text-muted-foreground">no connections yet.</p>
+            <p className="text-xs text-muted-foreground">No connections yet.</p>
           ) : (
-            <div className="flex flex-col border border-border">
+            <div className="flex flex-col rounded-md border border-border overflow-hidden">
               {connections.map((link) => {
                 const source = linkEndpointId(link.source);
                 const target = linkEndpointId(link.target);
@@ -138,10 +138,8 @@ export function MemoryNodeDetail({
                     onClick={() => onNavigate?.(otherId)}
                     className="flex items-center justify-between px-3 py-2 border-b border-border last:border-b-0 hover:bg-accent transition-colors duration-150 text-left"
                   >
-                    <span className="font-mono text-xs lowercase truncate min-w-0">
-                      {other.label}
-                    </span>
-                    <span className="text-[10px] font-mono uppercase text-muted-foreground shrink-0 ml-2">
+                    <span className="text-xs truncate min-w-0">{other.label}</span>
+                    <span className="text-xs text-muted-foreground shrink-0 ml-2 capitalize">
                       {link.relation.replace(/_/g, " ")}
                     </span>
                   </button>

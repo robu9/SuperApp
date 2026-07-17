@@ -42,37 +42,37 @@ const NAV_GROUPS: {
   items: { id: SettingsSection; label: string; icon: React.ElementType }[];
 }[] = [
   {
-    label: "capture & ai",
+    label: "Capture & AI",
     items: [
-      { id: "display", label: "display", icon: Layout },
-      { id: "general", label: "general", icon: SettingsIcon },
-      { id: "ai", label: "ai", icon: Brain },
-      { id: "recording", label: "recording", icon: Video },
-      { id: "shortcuts", label: "shortcuts", icon: Keyboard },
-      { id: "notifications", label: "notifications", icon: Bell },
+      { id: "display", label: "Display", icon: Layout },
+      { id: "general", label: "General", icon: SettingsIcon },
+      { id: "ai", label: "AI", icon: Brain },
+      { id: "recording", label: "Recording", icon: Video },
+      { id: "shortcuts", label: "Shortcuts", icon: Keyboard },
+      { id: "notifications", label: "Notifications", icon: Bell },
     ],
   },
   {
-    label: "privacy & security",
+    label: "Privacy & security",
     items: [
-      { id: "usage", label: "usage", icon: BarChart3 },
-      { id: "privacy", label: "privacy", icon: Shield },
+      { id: "usage", label: "Usage", icon: BarChart3 },
+      { id: "privacy", label: "Privacy", icon: Shield },
     ],
   },
   {
-    label: "data",
-    items: [{ id: "storage", label: "storage", icon: HardDrive }],
+    label: "Data",
+    items: [{ id: "storage", label: "Storage", icon: HardDrive }],
   },
   {
-    label: "audio",
-    items: [{ id: "speakers", label: "speakers", icon: Mic }],
+    label: "Audio",
+    items: [{ id: "speakers", label: "Speakers", icon: Mic }],
   },
   {
-    label: "account",
+    label: "Account",
     items: [
-      { id: "team", label: "team", icon: Users },
-      { id: "account", label: "account", icon: User },
-      { id: "referral", label: "referral", icon: Gift },
+      { id: "team", label: "Team", icon: Users },
+      { id: "account", label: "Account", icon: User },
+      { id: "referral", label: "Referral", icon: Gift },
     ],
   },
 ];
@@ -89,9 +89,9 @@ function SettingRow({
   return (
     <div className="flex items-center justify-between py-4 border-b border-border last:border-b-0">
       <div>
-        <div className="font-mono text-sm lowercase">{label}</div>
+        <div className="text-sm font-medium">{label}</div>
         {description && (
-          <div className="text-xs text-muted-foreground font-mono mt-0.5">{description}</div>
+          <div className="text-xs text-muted-foreground mt-0.5">{description}</div>
         )}
       </div>
       {children}
@@ -112,14 +112,14 @@ function Toggle({
       aria-checked={checked}
       onClick={() => onChange(!checked)}
       className={cn(
-        "w-10 h-5 border border-border relative transition-all duration-150",
-        checked ? "bg-foreground" : "bg-background"
+        "w-10 h-5 rounded-full relative transition-colors duration-150",
+        checked ? "bg-primary" : "bg-muted"
       )}
     >
       <span
         className={cn(
-          "absolute top-0.5 w-3.5 h-3.5 transition-all duration-150",
-          checked ? "right-0.5 bg-background" : "left-0.5 bg-foreground"
+          "absolute top-0.5 w-4 h-4 rounded-full bg-background shadow-sm transition-all duration-150",
+          checked ? "right-0.5" : "left-0.5"
         )}
       />
     </button>
@@ -131,28 +131,28 @@ function SectionContent({ section }: { section: SettingsSection }) {
   const { settings, setSetting } = useSettingsStore();
 
   const titles: Record<SettingsSection, string> = {
-    display: "display",
-    general: "general",
-    ai: "ai presets",
-    recording: "recording",
-    shortcuts: "shortcuts",
-    notifications: "notifications",
-    usage: "usage",
-    privacy: "privacy",
-    storage: "storage",
-    speakers: "speakers",
-    team: "team",
-    account: "account",
-    referral: "referral",
+    display: "Display",
+    general: "General",
+    ai: "AI presets",
+    recording: "Recording",
+    shortcuts: "Shortcuts",
+    notifications: "Notifications",
+    usage: "Usage",
+    privacy: "Privacy",
+    storage: "Storage",
+    speakers: "Speakers",
+    team: "Team",
+    account: "Account",
+    referral: "Referral",
   };
 
   return (
     <div className="max-w-2xl">
-      <h2 className="text-xl font-mono lowercase mb-6">{titles[section]}</h2>
-      <div className="border border-border p-6">
+      <h2 className="text-lg font-semibold mb-6">{titles[section]}</h2>
+      <div className="rounded-lg border border-border p-6 bg-card">
         {section === "display" && (
           <>
-            <SettingRow label="theme" description="light, dark, or system">
+            <SettingRow label="Theme" description="Light, dark, or system">
               <div className="flex gap-2">
                 {(["light", "dark", "system"] as const).map((t) => (
                   <Button
@@ -160,85 +160,88 @@ function SectionContent({ section }: { section: SettingsSection }) {
                     variant={theme === t ? "default" : "outline"}
                     size="sm"
                     onClick={() => setTheme(t)}
+                    className="capitalize"
                   >
                     {t}
                   </Button>
                 ))}
               </div>
             </SettingRow>
-            <SettingRow label="translucent sidebar" description="macOS vibrancy effect">
+            <SettingRow label="Translucent sidebar" description="macOS vibrancy effect">
               <Toggle
                 checked={settings.translucentSidebar}
                 onChange={(v) => setSetting("translucentSidebar", v)}
               />
             </SettingRow>
-            <SettingRow label="disable timeline" description="hide timeline section">
+            <SettingRow label="Disable timeline" description="Hide timeline section">
               <Toggle
                 checked={settings.disableTimeline}
                 onChange={(v) => setSetting("disableTimeline", v)}
               />
             </SettingRow>
-            <SettingRow label="font size" description={`${settings.fontSize}px base`}>
+            <SettingRow label="Font size" description={`${settings.fontSize}px base`}>
               <input
                 type="range"
                 min={14}
                 max={20}
                 value={settings.fontSize}
                 onChange={(e) => setSetting("fontSize", Number(e.target.value))}
-                className="w-32"
+                className="w-32 accent-foreground"
               />
             </SettingRow>
           </>
         )}
         {section === "general" && (
           <>
-            <SettingRow label="launch at startup" description="open SuperApp on login">
+            <SettingRow label="Launch at startup" description="Open SuperApp on login">
               <Toggle checked={false} onChange={() => {}} />
             </SettingRow>
-            <SettingRow label="check for updates" description="automatically">
+            <SettingRow label="Check for updates" description="Automatically">
               <Toggle checked={true} onChange={() => {}} />
             </SettingRow>
           </>
         )}
         {section === "recording" && (
           <>
-            <SettingRow label="screen capture" description="record your screen">
+            <SettingRow label="Screen capture" description="Record your screen">
               <Toggle checked={true} onChange={() => {}} />
             </SettingRow>
-            <SettingRow label="audio capture" description="record microphone and system audio">
+            <SettingRow label="Audio capture" description="Record microphone and system audio">
               <Toggle checked={true} onChange={() => {}} />
             </SettingRow>
-            <SettingRow label="ocr" description="extract text from screen frames">
+            <SettingRow label="OCR" description="Extract text from screen frames">
               <Toggle checked={true} onChange={() => {}} />
             </SettingRow>
           </>
         )}
         {section === "ai" && (
           <>
-            <SettingRow label="default model" description="google gemini">
-              <span className="text-sm font-mono text-muted-foreground">gemini-2.5-flash</span>
+            <SettingRow label="Default model" description="Google Gemini">
+              <span className="text-sm text-muted-foreground">gemini-2.5-flash</span>
             </SettingRow>
-            <SettingRow label="cloud fallback" description="use cloud when local unavailable">
+            <SettingRow label="Cloud fallback" description="Use cloud when local unavailable">
               <Toggle checked={false} onChange={() => {}} />
             </SettingRow>
           </>
         )}
         {section === "shortcuts" && (
-          <div className="space-y-2 font-mono text-sm">
+          <div className="space-y-1">
             {[
-              ["global search", "⌘K"],
-              ["new chat", "⌘N"],
-              ["toggle recording", "⌘⇧R"],
+              ["Global search", "⌘K"],
+              ["New chat", "⌘N"],
+              ["Toggle recording", "⌘⇧R"],
             ].map(([label, keys]) => (
-              <div key={label} className="flex justify-between py-2 border-b border-border">
-                <span className="lowercase">{label}</span>
-                <span className="text-muted-foreground uppercase tracking-wide text-xs">{keys}</span>
+              <div key={label} className="flex justify-between py-2.5 border-b border-border last:border-b-0">
+                <span className="text-sm">{label}</span>
+                <kbd className="inline-flex h-6 items-center rounded border border-border bg-muted px-2 text-xs font-medium text-muted-foreground">
+                  {keys}
+                </kbd>
               </div>
             ))}
           </div>
         )}
         {!["display", "general", "recording", "ai", "shortcuts"].includes(section) && (
-          <p className="text-sm text-muted-foreground font-mono lowercase">
+          <p className="text-sm text-muted-foreground">
             {titles[section]} settings — configure in full build
           </p>
         )}
@@ -258,41 +261,41 @@ export function SettingsPage() {
         <div className="flex flex-col h-full">
           <button
             onClick={() => navigate("/home")}
-            className="h-12 px-5 flex items-center gap-2 border-b border-border font-mono text-xs uppercase tracking-wide text-muted-foreground hover:bg-foreground hover:text-background transition-all duration-150"
+            className="nav-item w-full mb-2"
           >
             <ChevronLeft className="w-4 h-4" />
-            back
+            Back
           </button>
-          <div className="flex-1 overflow-y-auto scrollbar-hide py-2">
+          <div className="flex-1 overflow-y-auto scrollbar-hide space-y-4">
             {NAV_GROUPS.map((group) => (
-              <div key={group.label} className="mb-4">
-                <div className="px-5 py-2 text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+              <div key={group.label}>
+                <div className="px-2.5 py-1.5 text-xs font-medium text-muted-foreground">
                   {group.label}
                 </div>
-                {group.items.map((item) => {
-                  const Icon = item.icon;
-                  return (
-                    <button
-                      key={item.id}
-                      onClick={() => setSearchParams({ section: item.id })}
-                      className={cn(
-                        "w-full h-10 px-5 flex items-center gap-3 font-mono text-xs lowercase transition-all duration-150",
-                        section === item.id
-                          ? "bg-foreground text-background"
-                          : "text-muted-foreground hover:bg-accent"
-                      )}
-                    >
-                      <Icon className="w-3.5 h-3.5" />
-                      {item.label}
-                    </button>
-                  );
-                })}
+                <div className="space-y-0.5">
+                  {group.items.map((item) => {
+                    const Icon = item.icon;
+                    return (
+                      <button
+                        key={item.id}
+                        onClick={() => setSearchParams({ section: item.id })}
+                        className={cn(
+                          "nav-item w-full",
+                          section === item.id && "nav-item-active"
+                        )}
+                      >
+                        <Icon className="w-4 h-4 shrink-0" />
+                        {item.label}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
             ))}
           </div>
         </div>
       </AppSidebar>
-      <div className="flex-1 overflow-y-auto scrollbar-minimal p-8 pt-12">
+      <div className="flex-1 overflow-y-auto scrollbar-minimal p-8">
         <SectionContent section={section} />
       </div>
     </div>

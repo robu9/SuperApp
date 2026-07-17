@@ -44,9 +44,9 @@ export function SidebarProvider({ children }: { children: React.ReactNode }) {
   );
 }
 
-const DEFAULT_WIDTH = 240;
+const DEFAULT_WIDTH = 220;
 const MIN_WIDTH = 180;
-const MAX_WIDTH = 400;
+const MAX_WIDTH = 320;
 
 interface SidebarSlot {
   className?: string;
@@ -125,16 +125,15 @@ export function AppSidebarLayout({ children }: { children: React.ReactNode }) {
           <div
             style={{ width }}
             className={cn(
-              "relative border-r flex flex-col min-h-0 flex-shrink-0 pt-8",
+              "relative flex flex-col min-h-0 flex-shrink-0 border-r",
               isResizing || !hydrated ? "" : "transition-[width] duration-300",
-              isTranslucent ? "vibrant-sidebar" : "bg-background",
-              isTranslucent ? "border-transparent" : "border-border",
+              isTranslucent ? "vibrant-sidebar" : "bg-sidebar border-sidebar-border",
               slot.className
             )}
           >
             <div
               ref={setContainer}
-              className="flex flex-col min-h-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-hide"
+              className="flex flex-col min-h-0 flex-1 overflow-x-hidden overflow-y-auto scrollbar-hide px-2 py-3"
             />
             <div
               role="separator"
@@ -147,8 +146,8 @@ export function AppSidebarLayout({ children }: { children: React.ReactNode }) {
                 className={cn(
                   "absolute inset-y-0 right-[3px] w-px transition-colors",
                   isResizing
-                    ? "bg-foreground/30"
-                    : "bg-transparent group-hover/resize:bg-foreground/15"
+                    ? "bg-foreground/25"
+                    : "bg-transparent group-hover/resize:bg-foreground/10"
                 )}
               />
             </div>

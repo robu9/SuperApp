@@ -160,7 +160,7 @@ export function MemoryGraphLaneCanvas({
             x={(from.x + to.x) / 2}
             y={(from.y + to.y) / 2 - 6}
             textAnchor="middle"
-            className="fill-muted-foreground font-mono text-[9px] uppercase"
+            className="fill-muted-foreground text-[9px] font-medium"
           >
             {link.relation.replace(/_/g, " ")}
           </text>
@@ -223,8 +223,8 @@ export function MemoryGraphLaneCanvas({
 
       {mode === "story" ? (
         <div className="sticky top-0 left-0 right-0 z-10 border-b border-border bg-background/95 backdrop-blur-sm px-3 py-2 text-center">
-          <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
-            story · chronological memory path
+          <span className="text-xs font-medium text-muted-foreground">
+            Story · chronological memory path
           </span>
         </div>
       ) : (
@@ -234,7 +234,7 @@ export function MemoryGraphLaneCanvas({
               key={lane.id}
               className="flex-1 px-3 py-2 border-r border-border last:border-r-0 text-center min-w-[120px]"
             >
-              <span className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
+              <span className="text-xs font-medium text-muted-foreground">
                 {lane.label} ({laneCounts[lane.id] ?? 0})
               </span>
             </div>

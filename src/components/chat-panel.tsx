@@ -1,6 +1,7 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
 import {
   useChatStore,
@@ -9,21 +10,26 @@ import {
 } from "@/lib/stores/chat-store";
 
 function MessageBlock({ message }: { message: ChatMessage }) {
+  const isUser = message.role === "user";
   const time = new Date(message.timestamp).toLocaleTimeString([], {
     hour: "2-digit",
     minute: "2-digit",
-    second: "2-digit",
   });
 
   return (
-    <div className="flex flex-col gap-2">
-      <div className="flex justify-between items-center">
-        <span className="text-xs font-mono uppercase tracking-wide text-muted-foreground">
-          {message.role}
-        </span>
-        <span className="text-[10px] tabular-nums text-muted-foreground">{time}</span>
+    <div className={cn("flex flex-col gap-1.5", isUser && "items-end")}>
+      <div className={cn("flex items-center gap-2", isUser && "flex-row-reverse")}>
+        <span className="text-xs font-medium text-foreground capitalize">{message.role}</span>
+        <span className="text-xs tabular-nums text-muted-foreground">{time}</span>
       </div>
-      <div className="prose prose-sm dark:prose-invert max-w-none text-sm leading-relaxed whitespace-pre-wrap">
+      <div
+        className={cn(
+          "rounded-lg px-4 py-3 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap",
+          isUser
+            ? "bg-primary text-primary-foreground"
+            : "bg-surface border border-border text-foreground"
+        )}
+      >
         {message.content}
       </div>
     </div>
@@ -54,50 +60,49 @@ export function ChatPanel({ className }: { className?: string }) {
 
   return (
     <div className={cn("flex flex-col h-full min-h-0", className)}>
-      <div className="flex-1 overflow-y-auto scrollbar-minimal px-8 py-10">
-        <div className="mb-12">
-          <h1 className="text-2xl font-mono lowercase text-foreground tracking-wide">ai chat</h1>
-          <span className="text-sm text-muted-foreground font-mono">&gt;_ assistant online</span>
-        </div>
-        <div className="flex flex-col gap-10 max-w-3xl">
-          {session?.messages.map((msg, i) => (
-            <React.Fragment key={msg.id}>
-              {i > 0 && <div className="h-px bg-border w-full" />}
-              <MessageBlock message={msg} />
-            </React.Fragment>
+      <div className="page-header">
+        <h1 className="page-header-title">Chat</h1>
+        <p className="page-header-desc">Ask questions about your captured context</p>
+      </div>
+
+      <div className="flex-1 overflow-y-auto scrollbar-minimal px-6 py-6">
+        <div className="flex flex-col gap-6 max-w-3xl mx-auto">
+          {session?.messages.length === 0 && (
+            <div className="flex flex-col items-center justify-center py-16 text-center">
+              <p className="text-sm text-muted-foreground max-w-sm">
+                Start a conversation. Your assistant can search screen history, audio, and connected apps.
+              </p>
+            </div>
+          )}
+          {session?.messages.map((msg) => (
+            <MessageBlock key={msg.id} message={msg} />
           ))}
           {isStreaming && (
-            <>
-              <div className="h-px bg-border w-full" />
-              <div className="text-sm text-muted-foreground font-mono">
-                &gt; thinking<span className="animate-blink">_</span>
-              </div>
-            </>
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="inline-flex gap-1">
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse" />
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse [animation-delay:150ms]" />
+                <span className="w-1.5 h-1.5 rounded-full bg-muted-foreground animate-pulse [animation-delay:300ms]" />
+              </span>
+              Thinking…
+            </div>
           )}
           <div ref={bottomRef} />
         </div>
       </div>
-      <div className="p-6 shrink-0 border-t border-border">
-        <div className="border border-border h-[52px] w-full flex bg-background group">
-          <div className="flex-1 flex items-center px-4">
-            <span className="text-foreground mr-3 font-mono">&gt;_</span>
-            <input
-              type="text"
-              value={input}
-              onChange={(e) => setInput(e.target.value)}
-              onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-              placeholder="type your command or question..."
-              className="bg-transparent border-none outline-none w-full text-sm font-mono text-foreground placeholder:text-muted-foreground"
-            />
-          </div>
-          <Button
-            variant="outline"
-            className="h-full border-l border-t-0 border-b-0 border-r-0 px-6 gap-2"
-            onClick={handleSend}
-            disabled={!input.trim() || isStreaming}
-          >
-            send
-            <Send className="w-3 h-3" />
+
+      <div className="p-4 shrink-0 border-t border-border bg-background">
+        <div className="flex gap-2 max-w-3xl mx-auto">
+          <Input
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
+            placeholder="Ask anything…"
+            className="flex-1"
+          />
+          <Button onClick={handleSend} disabled={!input.trim() || isStreaming} className="gap-2 shrink-0">
+            Send
+            <Send className="w-3.5 h-3.5" />
           </Button>
         </div>
       </div>

@@ -124,11 +124,11 @@ export function TimelineSection() {
   if (loading) {
     return (
       <div className="flex flex-col h-full min-h-0 min-w-0 w-full overflow-hidden">
-        <div className="px-8 py-6 border-b border-border">
-          <h1 className="text-2xl font-mono lowercase">timeline</h1>
+        <div className="page-header">
+          <h1 className="page-header-title">Timeline</h1>
         </div>
-        <div className="flex-1 flex items-center justify-center text-muted-foreground font-mono text-sm">
-          loading frames...
+        <div className="flex-1 flex items-center justify-center text-muted-foreground text-sm">
+          Loading frames…
         </div>
       </div>
     );
@@ -137,17 +137,15 @@ export function TimelineSection() {
   if (frames.length === 0) {
     return (
       <div className="flex flex-col h-full min-h-0 min-w-0 w-full overflow-hidden">
-        <div className="px-8 py-6 border-b border-border">
-          <h1 className="text-2xl font-mono lowercase">timeline</h1>
-          <p className="text-sm text-muted-foreground font-mono mt-1">
-            browse your screen history
-          </p>
+        <div className="page-header">
+          <h1 className="page-header-title">Timeline</h1>
+          <p className="page-header-desc">Browse your screen history</p>
         </div>
-        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground font-mono text-sm lowercase">
-          <p>no frames captured yet — screen recording will populate this view</p>
+        <div className="flex-1 flex flex-col items-center justify-center gap-4 text-muted-foreground text-sm">
+          <p>No frames captured yet. Screen recording will populate this view.</p>
           {isGloballyPaused && (
-            <Button variant="outline" size="sm" onClick={() => void resumeAll()} className="font-mono text-xs">
-              resume screen recording
+            <Button variant="outline" size="sm" onClick={() => void resumeAll()}>
+              Resume screen recording
             </Button>
           )}
         </div>
@@ -160,34 +158,34 @@ export function TimelineSection() {
 
   return (
     <div className="flex flex-col h-full min-h-0 min-w-0 w-full overflow-hidden">
-      <div className="px-8 py-6 border-b border-border flex items-center justify-between gap-4">
+      <div className="page-header flex items-center justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-mono lowercase">timeline</h1>
-          <p className="text-sm text-muted-foreground font-mono mt-1">
-            browse your screen history · {frames.length} frames
-            {followLatestRef.current && atLatest && !isGloballyPaused ? " · live" : ""}
+          <h1 className="page-header-title">Timeline</h1>
+          <p className="page-header-desc">
+            Browse your screen history · {frames.length} frames
+            {followLatestRef.current && atLatest && !isGloballyPaused ? " · Live" : ""}
           </p>
         </div>
         {!atLatest && (
-          <Button variant="outline" size="sm" onClick={goToLatest} className="font-mono text-xs lowercase">
-            jump to latest
+          <Button variant="outline" size="sm" onClick={goToLatest}>
+            Jump to latest
           </Button>
         )}
       </div>
 
       {isGloballyPaused && (
-        <div className="mx-6 mt-4 flex items-center justify-between gap-4 border border-border bg-surface px-4 py-3">
-          <p className="text-xs font-mono text-muted-foreground lowercase">
-            screen recording is paused — audio may still be recording. resume to capture new frames.
+        <div className="mx-6 mt-4 flex items-center justify-between gap-4 rounded-lg border border-border bg-surface px-4 py-3">
+          <p className="text-sm text-muted-foreground">
+            Screen recording is paused. Resume to capture new frames.
           </p>
-          <Button variant="outline" size="sm" onClick={() => void resumeAll()} className="font-mono text-xs lowercase shrink-0">
-            resume screen
+          <Button variant="outline" size="sm" onClick={() => void resumeAll()} className="shrink-0">
+            Resume screen
           </Button>
         </div>
       )}
 
       <div className="flex-1 flex flex-col min-h-0 min-w-0 p-6 gap-4 overflow-hidden">
-        <div className="flex-1 border border-border bg-surface flex items-center justify-center relative min-h-[300px] overflow-hidden">
+        <div className="flex-1 rounded-lg border border-border bg-surface flex items-center justify-center relative min-h-[300px] overflow-hidden">
           {imageSrc && !imageError ? (
             <img
               src={imageSrc}
@@ -197,19 +195,18 @@ export function TimelineSection() {
             />
           ) : (
             <div className="text-center px-6">
-              <div className="text-6xl font-mono text-muted-foreground/30 mb-4">▦</div>
-              <p className="text-sm font-mono text-muted-foreground lowercase">
-                frame {frame.id} — {formatFrameTime(frame.timestamp)}
+              <p className="text-sm text-muted-foreground">
+                Frame {frame.id} — {formatFrameTime(frame.timestamp)}
               </p>
               {imageError && (
-                <p className="text-xs font-mono text-muted-foreground mt-2 lowercase">
-                  screenshot preview unavailable
+                <p className="text-xs text-muted-foreground mt-2">
+                  Screenshot preview unavailable
                 </p>
               )}
             </div>
           )}
-          <div className="absolute bottom-0 left-0 right-0 bg-background/90 border-t border-border p-3">
-            <p className="text-xs font-mono text-muted-foreground lowercase line-clamp-2">
+          <div className="absolute bottom-0 left-0 right-0 bg-background/90 backdrop-blur-sm border-t border-border p-3">
+            <p className="text-xs text-muted-foreground line-clamp-2">
               {frame.app_name && <span className="mr-2">{frame.app_name}</span>}
               {frameText}
             </p>
@@ -223,9 +220,9 @@ export function TimelineSection() {
             >
               <ChevronLeft className="w-4 h-4" />
             </Button>
-            <div className="flex-1 h-1 bg-border relative">
+            <div className="flex-1 h-1 bg-border relative rounded-full overflow-hidden">
               <div
-                className="absolute top-0 left-0 h-full bg-foreground transition-all duration-150"
+                className="absolute top-0 left-0 h-full bg-foreground transition-all duration-150 rounded-full"
                 style={{ width: `${((current + 1) / frames.length) * 100}%` }}
               />
             </div>
@@ -246,11 +243,11 @@ export function TimelineSection() {
               data-active={i === current ? "true" : "false"}
               onClick={() => goToFrame(i)}
               className={cn(
-                "flex-shrink-0 w-20 h-14 border font-mono text-[10px] lowercase transition-all duration-150",
+                "flex-shrink-0 w-20 h-14 rounded-md border text-[10px] transition-colors duration-150",
                 i === current
-                  ? "border-foreground bg-foreground text-background"
-                  : "border-border text-muted-foreground hover:border-foreground",
-                i === frames.length - 1 && followLatestRef.current && !isGloballyPaused && "ring-1 ring-foreground/40"
+                  ? "border-foreground bg-accent text-foreground"
+                  : "border-border text-muted-foreground hover:border-foreground/40 hover:bg-accent/50",
+                i === frames.length - 1 && followLatestRef.current && !isGloballyPaused && "ring-2 ring-foreground/20"
               )}
             >
               {formatFrameTime(f.timestamp)}

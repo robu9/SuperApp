@@ -5,104 +5,104 @@
 @layer base {
   :root {
     color-scheme: light;
-    --background: 0 0% 100%;
-    --foreground: 0 0% 0%;
-    --surface: 0 0% 96%;
-    --surface-secondary: 0 0% 93%;
-    --surface-tertiary: 0 0% 90%;
+    --background: 0 0% 99%;
+    --foreground: 0 0% 9%;
+    --surface: 0 0% 97%;
+    --surface-secondary: 0 0% 94%;
+    --surface-tertiary: 0 0% 91%;
     --card: 0 0% 100%;
-    --card-foreground: 0 0% 0%;
-    --card-hover: 0 0% 0%;
+    --card-foreground: 0 0% 9%;
+    --card-hover: 0 0% 97%;
     --popover: 0 0% 100%;
-    --popover-foreground: 0 0% 0%;
-    --primary: 0 0% 0%;
-    --primary-foreground: 0 0% 100%;
+    --popover-foreground: 0 0% 9%;
+    --primary: 0 0% 9%;
+    --primary-foreground: 0 0% 99%;
     --primary-hover: 0 0% 20%;
-    --primary-muted: 0 0% 90%;
+    --primary-muted: 0 0% 94%;
     --secondary: 0 0% 96%;
-    --secondary-foreground: 0 0% 0%;
-    --secondary-hover: 0 0% 90%;
-    --destructive: 0 0% 0%;
+    --secondary-foreground: 0 0% 9%;
+    --secondary-hover: 0 0% 92%;
+    --destructive: 0 72% 51%;
     --destructive-foreground: 0 0% 100%;
-    --destructive-hover: 0 0% 20%;
-    --destructive-muted: 0 0% 90%;
+    --destructive-hover: 0 72% 45%;
+    --destructive-muted: 0 72% 97%;
     --muted: 0 0% 96%;
-    --muted-foreground: 0 0% 40%;
-    --accent: 0 0% 96%;
-    --accent-foreground: 0 0% 0%;
+    --muted-foreground: 0 0% 42%;
+    --accent: 0 0% 94%;
+    --accent-foreground: 0 0% 9%;
     --accent-hover: 0 0% 90%;
-    --border: 0 0% 80%;
+    --border: 0 0% 88%;
     --input: 0 0% 100%;
-    --input-focus: 0 0% 0%;
-    --ring: 0 0% 0%;
-    --text-primary: 0 0% 0%;
-    --text-secondary: 0 0% 40%;
-    --text-tertiary: 0 0% 60%;
-    --text-disabled: 0 0% 70%;
+    --input-focus: 0 0% 9%;
+    --ring: 0 0% 9%;
+    --text-primary: 0 0% 9%;
+    --text-secondary: 0 0% 42%;
+    --text-tertiary: 0 0% 58%;
+    --text-disabled: 0 0% 72%;
     --sidebar-background: 0 0% 98%;
-    --sidebar-foreground: 0 0% 0%;
-    --sidebar-primary: 0 0% 0%;
-    --sidebar-primary-foreground: 0 0% 100%;
-    --sidebar-accent: 0 0% 96%;
-    --sidebar-accent-foreground: 0 0% 0%;
-    --sidebar-border: 0 0% 80%;
-    --sidebar-ring: 0 0% 0%;
-    --radius: 0;
-    --font-size-base: 16px;
-    --text-xs: calc(var(--font-size-base) * 0.75);
-    --text-sm: calc(var(--font-size-base) * 0.875);
+    --sidebar-foreground: 0 0% 9%;
+    --sidebar-primary: 0 0% 9%;
+    --sidebar-primary-foreground: 0 0% 99%;
+    --sidebar-accent: 0 0% 94%;
+    --sidebar-accent-foreground: 0 0% 9%;
+    --sidebar-border: 0 0% 90%;
+    --sidebar-ring: 0 0% 9%;
+    --radius: 0.5rem;
+    --font-size-base: 14px;
+    --text-xs: calc(var(--font-size-base) * 0.857);
+    --text-sm: calc(var(--font-size-base) * 0.929);
     --text-base: var(--font-size-base);
-    --text-lg: calc(var(--font-size-base) * 1.125);
-    --text-xl: calc(var(--font-size-base) * 1.25);
-    --text-2xl: calc(var(--font-size-base) * 1.5);
-    --text-3xl: calc(var(--font-size-base) * 1.875);
-    --text-4xl: calc(var(--font-size-base) * 2.25);
+    --text-lg: calc(var(--font-size-base) * 1.143);
+    --text-xl: calc(var(--font-size-base) * 1.286);
+    --text-2xl: calc(var(--font-size-base) * 1.571);
+    --text-3xl: calc(var(--font-size-base) * 1.857);
+    --text-4xl: calc(var(--font-size-base) * 2.286);
   }
 
   .dark {
     color-scheme: dark;
     --background: 0 0% 7%;
-    --foreground: 0 0% 100%;
+    --foreground: 0 0% 96%;
     --surface: 0 0% 10%;
     --surface-secondary: 0 0% 13%;
     --surface-tertiary: 0 0% 16%;
     --card: 0 0% 9%;
-    --card-foreground: 0 0% 100%;
-    --card-hover: 0 0% 100%;
+    --card-foreground: 0 0% 96%;
+    --card-hover: 0 0% 12%;
     --popover: 0 0% 10%;
-    --popover-foreground: 0 0% 100%;
-    --primary: 0 0% 100%;
-    --primary-foreground: 0 0% 0%;
-    --primary-hover: 0 0% 80%;
-    --primary-muted: 0 0% 15%;
+    --popover-foreground: 0 0% 96%;
+    --primary: 0 0% 96%;
+    --primary-foreground: 0 0% 9%;
+    --primary-hover: 0 0% 85%;
+    --primary-muted: 0 0% 16%;
     --secondary: 0 0% 14%;
-    --secondary-foreground: 0 0% 100%;
+    --secondary-foreground: 0 0% 96%;
     --secondary-hover: 0 0% 18%;
-    --destructive: 0 0% 100%;
-    --destructive-foreground: 0 0% 0%;
-    --destructive-hover: 0 0% 80%;
-    --destructive-muted: 0 0% 15%;
+    --destructive: 0 72% 55%;
+    --destructive-foreground: 0 0% 100%;
+    --destructive-hover: 0 72% 48%;
+    --destructive-muted: 0 72% 12%;
     --muted: 0 0% 14%;
-    --muted-foreground: 0 0% 75%;
+    --muted-foreground: 0 0% 62%;
     --accent: 0 0% 14%;
-    --accent-foreground: 0 0% 100%;
+    --accent-foreground: 0 0% 96%;
     --accent-hover: 0 0% 18%;
-    --border: 0 0% 22%;
+    --border: 0 0% 18%;
     --input: 0 0% 10%;
-    --input-focus: 0 0% 100%;
-    --ring: 0 0% 100%;
-    --text-primary: 0 0% 100%;
-    --text-secondary: 0 0% 60%;
-    --text-tertiary: 0 0% 40%;
-    --text-disabled: 0 0% 30%;
+    --input-focus: 0 0% 96%;
+    --ring: 0 0% 96%;
+    --text-primary: 0 0% 96%;
+    --text-secondary: 0 0% 62%;
+    --text-tertiary: 0 0% 48%;
+    --text-disabled: 0 0% 36%;
     --sidebar-background: 0 0% 5%;
-    --sidebar-foreground: 0 0% 100%;
-    --sidebar-primary: 0 0% 100%;
-    --sidebar-primary-foreground: 0 0% 0%;
+    --sidebar-foreground: 0 0% 96%;
+    --sidebar-primary: 0 0% 96%;
+    --sidebar-primary-foreground: 0 0% 9%;
     --sidebar-accent: 0 0% 14%;
-    --sidebar-accent-foreground: 0 0% 100%;
-    --sidebar-border: 0 0% 22%;
-    --sidebar-ring: 0 0% 100%;
+    --sidebar-accent-foreground: 0 0% 96%;
+    --sidebar-border: 0 0% 16%;
+    --sidebar-ring: 0 0% 96%;
   }
 }
 
@@ -113,36 +113,46 @@
 
   html {
     background-color: hsl(var(--background));
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
   }
 
   body {
-    @apply bg-background text-foreground font-mono;
+    @apply bg-background text-foreground font-sans;
     margin: 0;
     overflow: hidden;
+    font-feature-settings: "cv02", "cv03", "cv04", "cv11";
   }
 
-  html, body {
+  html,
+  body {
     -ms-overflow-style: none;
     scrollbar-width: none;
   }
 
-  *, button, a {
+  *,
+  button,
+  a {
     user-select: none;
     -webkit-user-drag: none;
     -webkit-tap-highlight-color: transparent;
   }
 
-  input, textarea, [contenteditable] {
+  input,
+  textarea,
+  [contenteditable] {
     user-select: text !important;
   }
 
-  .prose, .prose * {
+  .prose,
+  .prose * {
     user-select: text !important;
     cursor: text !important;
   }
 
-  .prose::selection, .prose *::selection {
-    background-color: rgba(59, 130, 246, 0.35) !important;
+  .prose::selection,
+  .prose *::selection {
+    background-color: hsl(var(--foreground) / 0.15) !important;
   }
 
   .scrollbar-hide {
@@ -155,22 +165,64 @@
 
   .scrollbar-minimal {
     scrollbar-width: thin;
-    scrollbar-color: hsl(var(--muted-foreground) / 0.5) transparent;
+    scrollbar-color: hsl(var(--muted-foreground) / 0.35) transparent;
   }
   .scrollbar-minimal::-webkit-scrollbar {
-    width: 8px;
-    height: 8px;
+    width: 6px;
+    height: 6px;
   }
   .scrollbar-minimal::-webkit-scrollbar-thumb {
-    background: hsl(var(--muted-foreground) / 0.4);
-    border-radius: 4px;
+    background: hsl(var(--muted-foreground) / 0.3);
+    border-radius: 999px;
   }
 
   .vibrant-sidebar {
-    background-color: rgba(255, 255, 255, 0.06) !important;
-    border-color: transparent;
+    background-color: hsl(var(--sidebar-background) / 0.85) !important;
+    backdrop-filter: blur(12px);
+    border-color: hsl(var(--sidebar-border) / 0.6) !important;
   }
-  .dark .vibrant-sidebar {
-    background-color: rgba(255, 255, 255, 0.06) !important;
+}
+
+@layer components {
+  .page-header {
+    @apply px-6 py-5 border-b border-border shrink-0;
+  }
+
+  .page-header-title {
+    @apply text-lg font-semibold text-foreground tracking-tight;
+  }
+
+  .page-header-desc {
+    @apply text-sm text-muted-foreground mt-0.5;
+  }
+
+  .nav-item {
+    @apply flex items-center gap-2.5 rounded-md px-2.5 py-2 text-sm font-medium text-muted-foreground transition-colors duration-150;
+  }
+
+  .nav-item:hover {
+    @apply bg-accent text-foreground;
+  }
+
+  .nav-item-active {
+    @apply bg-accent text-foreground;
+  }
+
+  .surface-card {
+    @apply rounded-lg border border-border bg-card p-4 transition-colors duration-150;
+  }
+
+  .surface-card:hover {
+    @apply border-foreground/20;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
   }
 }

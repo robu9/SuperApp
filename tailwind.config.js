@@ -10,8 +10,15 @@ export default {
     },
     extend: {
       fontFamily: {
-        sans: ["JetBrains Mono", "SF Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
-        mono: ["JetBrains Mono", "SF Mono", "IBM Plex Mono", "ui-monospace", "monospace"],
+        sans: [
+          "Inter",
+          "system-ui",
+          "-apple-system",
+          "BlinkMacSystemFont",
+          "Segoe UI",
+          "sans-serif",
+        ],
+        mono: ["SF Mono", "ui-monospace", "Menlo", "Consolas", "monospace"],
       },
       fontSize: {
         xs: ["var(--text-xs)", { lineHeight: "1rem" }],

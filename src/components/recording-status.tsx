@@ -1,6 +1,7 @@
 import React from "react";
 import { Monitor, MonitorOff, Mic, MicOff, Volume2, VolumeX, Phone, Pause, Play } from "lucide-react";
 import { Popover, PopoverContent, PopoverTrigger } from "@/components/ui/popover";
+import { Button } from "@/components/ui/button";
 import { cn } from "@/lib/utils";
 import { useRecordingStore, type RecordingDevice } from "@/lib/stores/recording-store";
 
@@ -25,7 +26,7 @@ interface RecordingStatusProps {
   floatingOverMedia?: boolean;
 }
 
-export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingStatusProps) {
+export function RecordingStatus({ floatingOverMedia }: RecordingStatusProps) {
   const [open, setOpen] = React.useState(false);
   const {
     devices,
@@ -43,42 +44,40 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
   const isScreenPaused = isGloballyPaused || monitorsPaused;
   const summary =
     devices.length === 0
-      ? "not recording"
+      ? "Not recording"
       : isScreenPaused
-        ? "paused"
-        : "recording";
-  const label = meetingActive ? `${summary} · meeting notes` : summary;
+        ? "Paused"
+        : "Recording";
+  const label = meetingActive ? `${summary} · Meeting` : summary;
+  const isActive = !isScreenPaused && devices.length > 0;
 
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger asChild>
         <button
           className={cn(
-            "flex items-center gap-2 px-3 h-8 font-mono text-xs uppercase tracking-wide transition-all duration-150 border",
+            "flex items-center gap-2 h-8 px-3 rounded-md text-xs font-medium transition-colors duration-150 border",
             floatingOverMedia
-              ? "border-foreground/20 bg-background/80 backdrop-blur-sm text-foreground"
-              : isTranslucent
-                ? "border-foreground/20 text-foreground hover:bg-foreground hover:text-background"
-                : "border-border text-muted-foreground hover:bg-foreground hover:text-background"
+              ? "border-border/60 bg-background/80 backdrop-blur-sm"
+              : "border-border bg-background hover:bg-accent"
           )}
         >
           <span
             className={cn(
-              "w-2 h-2 border border-current",
-              meetingActive && !isScreenPaused && "animate-pulse",
-              isScreenPaused && !meetingActive && "bg-transparent",
-              (!isScreenPaused || meetingActive) && "bg-current"
+              "w-2 h-2 rounded-full",
+              isActive && "bg-foreground",
+              isScreenPaused && devices.length > 0 && "bg-muted-foreground",
+              devices.length === 0 && "bg-muted-foreground/40",
+              meetingActive && isActive && "animate-pulse"
             )}
           />
-          <span>{label}</span>
-          <span className="tabular-nums text-[10px] opacity-70">{formatElapsed(elapsedSeconds)}</span>
+          <span className="text-foreground">{label}</span>
+          <span className="tabular-nums text-muted-foreground">{formatElapsed(elapsedSeconds)}</span>
         </button>
       </PopoverTrigger>
       <PopoverContent align="end" className="w-72 p-0">
-        <div className="p-3 border-b border-border">
-          <span className="text-xs font-mono uppercase tracking-wide text-muted-foreground">
-            recording status
-          </span>
+        <div className="px-4 py-3 border-b border-border">
+          <span className="text-sm font-medium text-foreground">Recording</span>
         </div>
         <div className="flex flex-col">
           {devices.map((device) => {
@@ -90,29 +89,29 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
               <div
                 key={device.fullName}
                 className={cn(
-                  "flex items-center justify-between px-4 py-3 border-b border-border text-sm font-mono",
+                  "flex items-center justify-between px-4 py-2.5 text-sm",
                   !isMonitor && "hover:bg-accent transition-colors duration-150"
                 )}
               >
-                <div className="flex items-center gap-3">
-                  <Icon className="w-4 h-4" />
-                  <span className="lowercase">{device.name}</span>
+                <div className="flex items-center gap-2.5">
+                  <Icon className="w-4 h-4 text-muted-foreground" />
+                  <span>{device.name}</span>
                 </div>
                 {isMonitor ? (
                   <button
                     type="button"
                     onClick={() => (isScreenPaused ? resumeAll() : pauseAll())}
-                    className="text-xs uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    {device.active ? "on" : "off"}
+                    {device.active ? "On" : "Off"}
                   </button>
                 ) : (
                   <button
                     type="button"
                     onClick={() => toggleDevice(device.fullName)}
-                    className="text-xs uppercase tracking-wide text-muted-foreground hover:text-foreground transition-colors"
+                    className="text-xs font-medium text-muted-foreground hover:text-foreground transition-colors"
                   >
-                    {device.active ? "on" : "off"}
+                    {device.active ? "On" : "Off"}
                   </button>
                 )}
               </div>
@@ -120,25 +119,24 @@ export function RecordingStatus({ isTranslucent, floatingOverMedia }: RecordingS
           })}
         </div>
         <div className="p-3 flex flex-col gap-2 border-t border-border">
-          <button
+          <Button
+            variant="outline"
+            size="sm"
+            className="w-full gap-2"
             onClick={isScreenPaused ? resumeAll : pauseAll}
-            className="flex items-center justify-center gap-2 h-9 border border-border font-mono text-xs uppercase tracking-wide hover:bg-foreground hover:text-background transition-all duration-150"
           >
-            {isScreenPaused ? <Play className="w-3 h-3" /> : <Pause className="w-3 h-3" />}
-            {isScreenPaused ? "resume all" : "pause all"}
-          </button>
-          <button
+            {isScreenPaused ? <Play className="w-3.5 h-3.5" /> : <Pause className="w-3.5 h-3.5" />}
+            {isScreenPaused ? "Resume all" : "Pause all"}
+          </Button>
+          <Button
+            variant={meetingActive ? "default" : "outline"}
+            size="sm"
+            className="w-full gap-2"
             onClick={toggleMeeting}
-            className={cn(
-              "flex items-center justify-center gap-2 h-9 border font-mono text-xs uppercase tracking-wide transition-all duration-150",
-              meetingActive
-                ? "bg-foreground text-background border-foreground"
-                : "border-border hover:bg-foreground hover:text-background"
-            )}
           >
-            <Phone className="w-3 h-3" />
-            {meetingActive ? "stop meeting notes" : "start meeting notes"}
-          </button>
+            <Phone className="w-3.5 h-3.5" />
+            {meetingActive ? "Stop meeting notes" : "Start meeting notes"}
+          </Button>
         </div>
       </PopoverContent>
     </Popover>

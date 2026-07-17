@@ -18,12 +18,13 @@ import { RecordingStatus } from "@/components/recording-status";
 import { ChatPanel } from "@/components/chat-panel";
 import { ChatSidebar } from "@/components/chat-sidebar";
 import { TimelineSection } from "@/components/sections/timeline-section";
-import { PipesSection } from "@/components/sections/pipes-section";
+import { WorkflowsSection } from "@/components/sections/workflows-section";
 import { MeetingsSection } from "@/components/sections/meetings-section";
 import { BrainSection } from "@/components/sections/brain-section";
 import { ConnectionsSection } from "@/components/sections/connections-section";
 import { HelpSection } from "@/components/sections/help-section";
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from "@/components/ui/tooltip";
+import { Button } from "@/components/ui/button";
 import { cn, formatShortcut } from "@/lib/utils";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useRecordingStore } from "@/lib/stores/recording-store";
@@ -33,7 +34,7 @@ import { electron } from "@/lib/electron";
 type MainSection =
   | "home"
   | "timeline"
-  | "pipes"
+  | "workflows"
   | "meetings"
   | "brain"
   | "connections"
@@ -41,13 +42,13 @@ type MainSection =
   | "history";
 
 const NAV_ITEMS: { id: MainSection; label: string; icon: React.ElementType }[] = [
-  { id: "home", label: "chat", icon: MessageSquare },
-  { id: "timeline", label: "timeline", icon: Clock },
-  { id: "pipes", label: "pipes", icon: Workflow },
-  { id: "meetings", label: "meetings", icon: NotebookPen },
-  { id: "brain", label: "brain", icon: Brain },
-  { id: "connections", label: "connections", icon: Plug },
-  { id: "help", label: "help", icon: HelpCircle },
+  { id: "home", label: "Chat", icon: MessageSquare },
+  { id: "timeline", label: "Timeline", icon: Clock },
+  { id: "workflows", label: "Workflows", icon: Workflow },
+  { id: "meetings", label: "Meetings", icon: NotebookPen },
+  { id: "brain", label: "Brain", icon: Brain },
+  { id: "connections", label: "Connections", icon: Plug },
+  { id: "help", label: "Help", icon: HelpCircle },
 ];
 
 const SETTINGS_SECTIONS = new Set([
@@ -79,6 +80,12 @@ export function HomePage() {
   }, [section, navigate]);
 
   useEffect(() => {
+    if (searchParams.get("section") === "pipes") {
+      setSearchParams({ section: "workflows" });
+    }
+  }, [searchParams, setSearchParams]);
+
+  useEffect(() => {
     if (disableTimeline && section === "timeline") {
       setSearchParams({ section: "home" });
     }
@@ -92,61 +99,54 @@ export function HomePage() {
   }, [createSession]);
 
   const setSection = (s: MainSection) => setSearchParams({ section: s });
-
   const openSearch = () => electron?.openWindow("search");
 
   return (
     <TooltipProvider>
-      <div className="flex flex-col h-screen min-h-0 min-w-0 flex-1 relative">
-        {/* Floating top-left chrome */}
-        <div className="absolute top-0 left-0 right-0 z-30 flex items-center gap-1 px-3 pt-8 pb-2 pointer-events-none">
-          <div className="flex items-center gap-1 pointer-events-auto">
+      <div className="flex flex-col h-screen min-h-0 min-w-0 flex-1">
+        <header
+          className={cn(
+            "shrink-0 flex items-center justify-between gap-3 px-4 h-12 border-b",
+            isTranslucent ? "border-border/60 bg-background/80 backdrop-blur-md" : "border-border bg-background"
+          )}
+        >
+          <div className="flex items-center gap-2">
             <Tooltip>
               <TooltipTrigger asChild>
-                <button
+                <Button
+                  variant="ghost"
+                  size="icon"
+                  className="h-8 w-8"
                   onClick={() => setSidebarOpen((o) => !o)}
-                  className={cn(
-                    "h-8 w-8 flex items-center justify-center border transition-all duration-150",
-                    isTranslucent
-                      ? "border-foreground/20 bg-background/80 backdrop-blur-sm hover:bg-foreground hover:text-background"
-                      : "border-border hover:bg-foreground hover:text-background"
-                  )}
                 >
                   {sidebarOpen ? (
                     <PanelLeftClose className="w-4 h-4" />
                   ) : (
                     <PanelLeftOpen className="w-4 h-4" />
                   )}
-                </button>
+                </Button>
               </TooltipTrigger>
-              <TooltipContent>toggle sidebar</TooltipContent>
+              <TooltipContent>Toggle sidebar</TooltipContent>
             </Tooltip>
-            <Tooltip>
-              <TooltipTrigger asChild>
-                <button
-                  onClick={openSearch}
-                  className={cn(
-                    "h-8 px-3 flex items-center gap-2 border font-mono text-xs uppercase tracking-wide transition-all duration-150",
-                    isTranslucent
-                      ? "border-foreground/20 bg-background/80 backdrop-blur-sm hover:bg-foreground hover:text-background"
-                      : "border-border hover:bg-foreground hover:text-background"
-                  )}
-                >
-                  <Search className="w-3 h-3" />
-                  search
-                  <span className="text-[10px] opacity-60">{formatShortcut("Cmd+K")}</span>
-                </button>
-              </TooltipTrigger>
-              <TooltipContent>global search</TooltipContent>
-            </Tooltip>
-            <RecordingStatus isTranslucent={isTranslucent} />
+            <span className="text-sm font-semibold text-foreground tracking-tight">SuperApp</span>
           </div>
-        </div>
 
-        <div className="flex flex-1 min-h-0 min-w-0 pt-14">
+          <div className="flex items-center gap-2">
+            <RecordingStatus />
+            <Button variant="outline" size="sm" className="gap-2 h-8" onClick={openSearch}>
+              <Search className="w-3.5 h-3.5" />
+              <span className="hidden sm:inline">Search</span>
+              <kbd className="hidden sm:inline-flex h-5 items-center rounded border border-border bg-muted px-1.5 text-[10px] font-medium text-muted-foreground">
+                {formatShortcut("Cmd+K")}
+              </kbd>
+            </Button>
+          </div>
+        </header>
+
+        <div className="flex flex-1 min-h-0 min-w-0">
           {sidebarOpen && (
             <AppSidebar>
-              <nav className="flex flex-col flex-1 min-h-0">
+              <nav className="flex flex-col flex-1 min-h-0 gap-0.5">
                 {NAV_ITEMS.filter((item) => !(disableTimeline && item.id === "timeline")).map(
                   (item) => {
                     const Icon = item.icon;
@@ -155,38 +155,33 @@ export function HomePage() {
                       <button
                         key={item.id}
                         onClick={() => setSection(item.id)}
-                        className={cn(
-                          "h-12 px-5 flex items-center gap-4 border-b border-border font-mono text-xs uppercase tracking-wide transition-all duration-150",
-                          active
-                            ? "bg-foreground text-background"
-                            : "text-muted-foreground hover:bg-foreground hover:text-background"
-                        )}
+                        className={cn("nav-item w-full", active && "nav-item-active")}
                       >
-                        <Icon className="w-4 h-4" />
+                        <Icon className="w-4 h-4 shrink-0" />
                         {item.label}
                       </button>
                     );
                   }
                 )}
-                <div className="flex-1" />
+                <div className="flex-1 min-h-4" />
                 <button
                   onClick={() => navigate("/settings")}
-                  className="h-12 px-5 flex items-center gap-4 border-t border-border font-mono text-xs uppercase tracking-wide text-muted-foreground hover:bg-foreground hover:text-background transition-all duration-150"
+                  className="nav-item w-full"
                 >
-                  <SettingsIcon className="w-4 h-4" />
-                  settings
+                  <SettingsIcon className="w-4 h-4 shrink-0" />
+                  Settings
                 </button>
               </nav>
             </AppSidebar>
           )}
 
-          <main className="flex flex-1 min-h-0 min-w-0">
+          <main className="flex flex-1 min-h-0 min-w-0 bg-background">
             {section === "home" && (
               <div className="flex flex-1 min-h-0">
                 <div className="flex-1 min-w-0">
                   <ChatPanel />
                 </div>
-                <div className="w-64 border-l border-border hidden lg:flex flex-col min-h-0">
+                <div className="w-64 border-l border-border hidden lg:flex flex-col min-h-0 bg-surface">
                   <ChatSidebar />
                 </div>
               </div>
@@ -196,7 +191,7 @@ export function HomePage() {
                 <TimelineSection />
               </div>
             )}
-            {section === "pipes" && <PipesSection />}
+            {section === "workflows" && <WorkflowsSection />}
             {section === "meetings" && <MeetingsSection />}
             {section === "brain" && (
               <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">

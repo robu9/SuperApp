@@ -115,12 +115,10 @@ export function ConnectionsSection() {
 
   return (
     <div className="flex flex-col h-full min-h-0 overflow-y-auto scrollbar-minimal">
-      <div className="px-8 py-6 border-b border-border flex items-center justify-between">
+      <div className="page-header flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-mono lowercase">connections</h1>
-          <p className="text-sm text-muted-foreground font-mono mt-1">
-            third-party integrations via composio
-          </p>
+          <h1 className="page-header-title">Connections</h1>
+          <p className="page-header-desc">Third-party integrations via Composio</p>
         </div>
         <Button
           variant="outline"
@@ -134,13 +132,13 @@ export function ConnectionsSection() {
 
       <div className="p-6 grid gap-3 max-w-xl">
         {loading && (
-          <div className="flex items-center gap-2 font-mono text-sm text-muted-foreground">
-            <Loader2 className="w-4 h-4 animate-spin" /> loading…
+          <div className="flex items-center gap-2 text-sm text-muted-foreground">
+            <Loader2 className="w-4 h-4 animate-spin" /> Loading…
           </div>
         )}
 
         {!loading && !configured && (
-          <div className="border border-border p-4 font-mono text-sm text-muted-foreground">
+          <div className="rounded-lg border border-border p-4 text-sm text-muted-foreground">
             composio is not configured. add{" "}
             <span className="text-foreground">COMPOSIO_API_KEY</span> and the{" "}
             <span className="text-foreground">COMPOSIO_AUTH_CONFIG_*</span> ids to
@@ -149,7 +147,7 @@ export function ConnectionsSection() {
         )}
 
         {!loading && error && (
-          <div className="border border-border p-4 font-mono text-sm text-red-500">
+          <div className="rounded-lg border border-border p-4 text-sm text-destructive">
             {error}
           </div>
         )}
@@ -161,13 +159,13 @@ export function ConnectionsSection() {
             return (
               <div
                 key={conn.toolkit}
-                className="border border-border p-4 flex items-center justify-between hover:border-foreground transition-colors duration-150"
+                className="surface-card flex items-center justify-between"
               >
                 <div className="flex items-center gap-3">
-                  <Plug className="w-4 h-4" />
-                  <span className="font-mono text-sm lowercase">{conn.name}</span>
+                  <Plug className="w-4 h-4 text-muted-foreground" />
+                  <span className="text-sm font-medium">{conn.name}</span>
                   {!conn.configured && (
-                    <span className="font-mono text-xs text-muted-foreground">
+                    <span className="text-xs text-muted-foreground">
                       (no auth config)
                     </span>
                   )}
