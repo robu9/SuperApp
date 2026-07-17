@@ -310,6 +310,18 @@ export const api = {
     request<{ status: string }>("POST", `/connectors/${toolkit}/disconnect`, {
       connectedAccountId,
     }),
+  pipes: () => request<{ data: PipeListItem[] }>("GET", "/pipes"),
+  installPipe: (id: PipeId) =>
+    request<{ status: string; installed: boolean }>("POST", `/pipes/${id}/install`),
+  uninstallPipe: (id: PipeId) =>
+    request<{ status: string; installed: boolean }>("POST", `/pipes/${id}/uninstall`),
+  enablePipe: (id: PipeId, enabled: boolean) =>
+    request<{ status: string; enabled: boolean }>("POST", `/pipes/${id}/enable`, {
+      enabled,
+    }),
+  runPipe: (id: PipeId) => request<PipeRunResponse>("POST", `/pipes/${id}/run`),
+  pipeLogs: (id: PipeId, limit = 20) =>
+    request<{ data: PipeRunLog[] }>("GET", `/pipes/${id}/logs?limit=${limit}`),
 };
 
 /** Load a frame screenshot for display — base64 via API first (Electron-safe), then binary URL. */

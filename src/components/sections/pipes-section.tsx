@@ -28,7 +28,8 @@ export function PipesSection() {
     try {
       const res = await api.pipes();
       setPipes(res.data);
-    } catch {
+    } catch (err) {
+      console.error("[pipes] failed to load:", err);
       setPipes([]);
     } finally {
       setLoading(false);
@@ -93,6 +94,11 @@ export function PipesSection() {
           <div className="col-span-full flex items-center gap-2 text-sm text-muted-foreground font-mono">
             <Loader2 className="w-4 h-4 animate-spin" />
             loading pipes...
+          </div>
+        ) : null}
+        {!loading && pipes.length === 0 ? (
+          <div className="col-span-full text-sm text-muted-foreground font-mono">
+            no pipes available — make sure the backend is running
           </div>
         ) : null}
         {pipes.map((pipe) => {
