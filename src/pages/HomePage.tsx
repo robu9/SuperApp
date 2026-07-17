@@ -198,7 +198,11 @@ export function HomePage() {
             )}
             {section === "pipes" && <PipesSection />}
             {section === "meetings" && <MeetingsSection />}
-            {section === "brain" && <BrainSection />}
+            {section === "brain" && (
+              <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
+                <BrainSection />
+              </div>
+            )}
             {section === "connections" && <ConnectionsSection />}
             {section === "help" && <HelpSection />}
           </main>
