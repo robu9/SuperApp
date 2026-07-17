@@ -3,6 +3,7 @@ import { SUPERMEMORY_CONTAINER_TAG } from "../config.js";
 import {
   buildGraphFromSearchResult,
   documentToMemoryNode,
+  resolveSearchDocumentId,
   searchResultToMemoryNode,
 } from "./adapter.js";
 import { getSupermemoryClient, isSupermemoryReachable } from "./client.js";
@@ -177,11 +178,20 @@ export async function listNodes(params: {
         q: params.q,
         containerTag: SUPERMEMORY_CONTAINER_TAG,
         limit,
+        include: {
+          relatedMemories: true,
+          documents: true,
+        },
       });
 
+      const seen = new Set<string>();
       const data = response.results
         .map(searchResultToMemoryNode)
-        .filter((node) => !params.type || node.type === params.type);
+        .filter((node) => {
+          if (seen.has(node.id)) return false;
+          seen.add(node.id);
+          return !params.type || node.type === params.type;
+        });
 
       return { data, total: data.length };
     }
@@ -250,11 +260,19 @@ export async function getNodeGraph(
     const response = await client.search.memories({
       q: node.content.slice(0, 200) || node.title || id,
       containerTag: SUPERMEMORY_CONTAINER_TAG,
-      limit: 5,
+      limit: 12,
+      threshold: 0.25,
+      include: {
+        relatedMemories: true,
+        documents: true,
+      },
     });
 
     const match =
-      response.results.find((result) => result.id === id) ?? response.results[0];
+      response.results.find(
+        (result) =>
+          resolveSearchDocumentId(result) === id || result.id === id
+      ) ?? response.results[0];
 
     if (!match) return { node, edges: [] };
     return buildGraphFromSearchResult(node, match, response.results);
@@ -280,14 +298,21 @@ export async function getMemoryStats(): Promise<MemoryStats> {
     });
 
     const by_type: Record<string, number> = {};
+    let appLinked = 0;
     for (const doc of response.memories) {
       const node = documentToMemoryNode(doc);
       by_type[node.type] = (by_type[node.type] ?? 0) + 1;
+      if (node.app_name?.trim()) appLinked++;
     }
 
+    const nodes = response.pagination?.totalItems ?? response.memories.length;
+    // Structural edges: app hubs + chronological chain ≈ n + (n-1) when linked.
+    const edges =
+      nodes <= 1 ? 0 : Math.max(0, appLinked + Math.max(nodes - 1, 0));
+
     return {
-      nodes: response.pagination?.totalItems ?? response.memories.length,
-      edges: 0,
+      nodes,
+      edges,
       by_type,
     };
   } catch {

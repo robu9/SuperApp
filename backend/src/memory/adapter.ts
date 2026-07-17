@@ -1,6 +1,6 @@
 import type { DocumentListResponse } from "supermemory/resources/documents.js";
 import type { SearchMemoriesResponse } from "supermemory/resources/search.js";
-import type { MemoryGraph, MemoryNode, MemoryNodeType } from "./types.js";
+import type { MemoryGraph, MemoryNode, MemoryNodeType, MemoryRelation } from "./types.js";
 
 function metadataRecord(
   metadata: DocumentListResponse.Memory["metadata"]
@@ -9,6 +9,17 @@ function metadataRecord(
     return null;
   }
   return metadata as Record<string, unknown>;
+}
+
+/** Prefer document id so graph nodes match documents.list / documents.get. */
+export function resolveSearchDocumentId(
+  result: SearchMemoriesResponse.Result
+): string {
+  const doc = result.documents?.[0];
+  if (doc && typeof doc.id === "string" && doc.id.length > 0) {
+    return doc.id;
+  }
+  return result.id;
 }
 
 export function documentToMemoryNode(doc: DocumentListResponse.Memory): MemoryNode {
@@ -56,7 +67,7 @@ export function searchResultToMemoryNode(
   ) as MemoryNodeType;
 
   return {
-    id: result.id,
+    id: resolveSearchDocumentId(result),
     type,
     title:
       typeof metadata.title === "string"
@@ -84,6 +95,14 @@ export function searchResultToMemoryNode(
         : result.updatedAt,
     updated_at: result.updatedAt,
   };
+}
+
+function relationFromContext(
+  relation: string | undefined
+): MemoryRelation {
+  if (relation === "updates") return "follows";
+  if (relation === "extends" || relation === "derives") return "derived_from";
+  return "related_to";
 }
 
 export function buildGraphFromSearchResult(
@@ -116,23 +135,28 @@ export function buildGraphFromSearchResult(
   };
 
   for (const item of allResults
-    .filter((candidate) => candidate.id !== node.id)
+    .filter((candidate) => resolveSearchDocumentId(candidate) !== node.id)
     .sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0))
-    .slice(0, 2)) {
+    .slice(0, 6)) {
     const similarity = item.similarity ?? 0;
-    if (similarity < 0.35 && edges.length > 0) continue;
-    addEdge(
-      searchResultToMemoryNode(item),
-      "related_to",
-      similarity || 0.5
-    );
+    if (similarity < 0.2 && edges.length >= 3) continue;
+    addEdge(searchResultToMemoryNode(item), "related_to", similarity || 0.5);
   }
 
   const context = result.context;
   const related = [
-    ...(context?.related ?? []),
-    ...(context?.parents ?? []),
-    ...(context?.children ?? []),
+    ...(context?.related ?? []).map((item) => ({
+      ...item,
+      mappedRelation: relationFromContext(item.relation),
+    })),
+    ...(context?.parents ?? []).map((item) => ({
+      ...item,
+      mappedRelation: relationFromContext(item.relation),
+    })),
+    ...(context?.children ?? []).map((item) => ({
+      ...item,
+      mappedRelation: relationFromContext(item.relation),
+    })),
   ];
 
   for (const item of related) {
@@ -143,27 +167,67 @@ export function buildGraphFromSearchResult(
 
     if (!neighborContent.trim()) continue;
 
+    const meta =
+      typeof item === "object" && item && "metadata" in item && item.metadata
+        ? (item.metadata as Record<string, unknown>)
+        : null;
+
     const itemId =
-      typeof item === "object" && item && "id" in item && typeof item.id === "string"
-        ? item.id
-        : `related-${edges.length}`;
+      typeof meta?.document_id === "string"
+        ? meta.document_id
+        : typeof meta?.source_id === "number"
+          ? `src-${meta.source_id}`
+          : typeof item === "object" &&
+              item &&
+              "id" in item &&
+              typeof (item as { id?: unknown }).id === "string"
+            ? String((item as { id: string }).id)
+            : null;
+
+    // Skip synthetic IDs that can't join the document graph — match by content later on client.
+    if (!itemId) {
+      const contentKey = neighborContent
+        .slice(0, 80)
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/g, "-")
+        .slice(0, 32);
+      const neighbor: MemoryNode = {
+        id: `ctx-${contentKey || edges.length}`,
+        type: "memory",
+        title: neighborContent.slice(0, 60).toLowerCase(),
+        content: neighborContent,
+        metadata: meta,
+        source_type: null,
+        source_id: null,
+        app_name: typeof meta?.app_name === "string" ? meta.app_name : null,
+        window_name: null,
+        salience: 0.5,
+        created_at: node.updated_at,
+        updated_at: node.updated_at,
+      };
+      addEdge(neighbor, item.mappedRelation);
+      continue;
+    }
 
     const neighbor: MemoryNode = {
       id: itemId,
-      type: "memory",
+      type:
+        typeof meta?.superapp_type === "string"
+          ? (meta.superapp_type as MemoryNodeType)
+          : "memory",
       title: neighborContent.slice(0, 60).toLowerCase(),
       content: neighborContent,
-      metadata: null,
+      metadata: meta,
       source_type: null,
-      source_id: null,
-      app_name: null,
+      source_id: typeof meta?.source_id === "number" ? meta.source_id : null,
+      app_name: typeof meta?.app_name === "string" ? meta.app_name : null,
       window_name: null,
       salience: 0.5,
       created_at: node.updated_at,
       updated_at: node.updated_at,
     };
 
-    addEdge(neighbor, "related_to");
+    addEdge(neighbor, item.mappedRelation);
   }
 
   return { node, edges };

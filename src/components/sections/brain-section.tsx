@@ -1,9 +1,11 @@
-import React, { useCallback, useEffect, useMemo, useState } from "react";
+import React, { useCallback, useEffect, useState } from "react";
 import { Brain, Loader2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
-import type { MemoryGraphData } from "@/components/sections/memory-graph-canvas";
-import { MemoryGraphLaneCanvas } from "@/components/sections/memory-graph-lane-canvas";
+import {
+  MemoryGraphCanvas,
+  type MemoryGraphData,
+} from "@/components/sections/memory-graph-canvas";
 import { MemoryNodeDetail } from "@/components/sections/memory-node-detail";
 import {
   expandGraphForMemories,
@@ -12,14 +14,12 @@ import {
   graphFromMemories,
   mergeGraphResponse,
 } from "@/lib/memory-graph";
-import { buildTypeLanes, countNodeKinds } from "@/lib/memory-graph-layout";
+import { countNodeKinds } from "@/lib/memory-graph-layout";
 
 const NODE_LEGEND = [
-  { type: "screen_chunk", label: "screen" },
-  { type: "audio_chunk", label: "audio" },
-  { type: "memory", label: "memory" },
-  { type: "topic", label: "topic" },
-  { type: "meeting", label: "meeting" },
+  { color: "#f97316", label: "memory" },
+  { color: "#e5e5e5", label: "hub" },
+  { color: "rgba(255,255,255,0.55)", label: "link", ring: true },
 ];
 
 export function BrainSection() {
@@ -35,8 +35,8 @@ export function BrainSection() {
     setLoading(true);
     setError(null);
     try {
-      const list = await api.memory({ q: search?.trim() || undefined, limit: 40 });
-      const base = graphFromMemories(list.data);
+      const list = await api.memory({ q: search?.trim() || undefined, limit: 60 });
+      const base = finalizeGraph(graphFromMemories(list.data));
       setGraph(base);
       setLoading(false);
 
@@ -44,7 +44,7 @@ export function BrainSection() {
 
       setExpanding(true);
       const expanded = finalizeGraph(
-        await expandGraphForMemories(base, list.data.slice(0, 12))
+        await expandGraphForMemories(base, list.data.slice(0, 24))
       );
       setGraph(expanded);
     } catch (err) {
@@ -66,10 +66,10 @@ export function BrainSection() {
     return () => clearTimeout(timer);
   }, [query, loadGraph]);
 
-  const typeLanes = useMemo(() => buildTypeLanes(graph), [graph]);
   const detailNode = selectedId ? getNodeById(graph, selectedId) : null;
 
   const expandSelected = useCallback(async (id: string) => {
+    if (id.startsWith("hub-")) return;
     setExpanding(true);
     try {
       const response = await api.memoryGraph(id, 2);
@@ -95,15 +95,22 @@ export function BrainSection() {
         <div className="min-w-0 shrink-0">
           <h1 className="page-header-title">Brain</h1>
           <p className="page-header-desc">
-            {graph.nodes.length} nodes · {graph.links.length} edges · {countNodeKinds(graph)} kinds
+            {graph.nodes.length} nodes · {graph.links.length} edges · {countNodeKinds(graph)}{" "}
+            kinds
             {expanding && " · Expanding…"}
           </p>
         </div>
 
         <div className="hidden md:flex items-center gap-3 ml-4">
           {NODE_LEGEND.map((item) => (
-            <div key={item.type} className="flex items-center gap-1.5">
-              <span className="w-2 h-2 rounded-full border border-foreground/40 bg-background shrink-0" />
+            <div key={item.label} className="flex items-center gap-1.5">
+              <span
+                className="w-2 h-2 rounded-full shrink-0"
+                style={{
+                  background: item.ring ? "transparent" : item.color,
+                  boxShadow: item.ring ? `inset 0 0 0 1px ${item.color}` : undefined,
+                }}
+              />
               <span className="text-xs text-muted-foreground capitalize">{item.label}</span>
             </div>
           ))}
@@ -121,9 +128,9 @@ export function BrainSection() {
       </div>
 
       <div className="flex flex-1 min-h-0 relative">
-        <div className="flex-1 min-w-0 relative">
+        <div className="flex-1 min-w-0 relative bg-black">
           {loading && graph.nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground z-20 bg-background/80">
+            <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-white/50 z-20 bg-black/80">
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading memory graph…
             </div>
@@ -137,23 +144,23 @@ export function BrainSection() {
 
           {!loading && !error && graph.nodes.length === 0 && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center z-20">
-              <Brain className="w-10 h-10 text-muted-foreground" />
-              <p className="text-sm text-muted-foreground max-w-md">
-                No memories yet. Start recording and SuperMemory will build your graph automatically.
+              <Brain className="w-10 h-10 text-white/40" />
+              <p className="text-sm text-white/50 max-w-md">
+                No memories yet. Start recording and SuperMemory will build your graph
+                automatically.
               </p>
             </div>
           )}
 
           {graph.nodes.length > 0 && (
-            <MemoryGraphLaneCanvas
+            <MemoryGraphCanvas
               data={graph}
-              lanes={typeLanes}
-              focusId={hoverId ?? selectedId}
-              onFocus={setHoverId}
-              onSelect={(id) => handleSelect(id)}
+              selectedId={selectedId}
+              hoverId={hoverId}
+              onHover={setHoverId}
+              onSelect={handleSelect}
             />
           )}
-
         </div>
 
         {detailNode && selectedId && (
