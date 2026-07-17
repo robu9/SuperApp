@@ -15,6 +15,7 @@ export interface ElectronAPI {
   getPlatform: () => Promise<NodeJS.Platform>;
   getVersion: () => Promise<string>;
   quit: () => Promise<void>;
+  restart: () => Promise<void>;
   getLoginItemSettings: () => Promise<{ openAtLogin: boolean; openAsHidden?: boolean }>;
   setLoginItemSettings: (openAtLogin: boolean) => Promise<{ openAtLogin: boolean; openAsHidden?: boolean }>;
   openPath: (targetPath: string) => Promise<string>;

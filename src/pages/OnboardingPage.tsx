@@ -68,6 +68,7 @@ function PermissionsSlide({ onNext }: { onNext: () => void }) {
   ];
   const [status, setStatus] = useState<PermissionStatus | null>(null);
   const [requesting, setRequesting] = useState<PermissionId | null>(null);
+  const [restartRequired, setRestartRequired] = useState(false);
 
   const refresh = async () => {
     const next = await electron?.permissions.get();
@@ -76,12 +77,22 @@ function PermissionsSlide({ onNext }: { onNext: () => void }) {
 
   useEffect(() => {
     void refresh();
+    const interval = window.setInterval(() => void refresh(), 2_000);
+    const onFocus = () => void refresh();
+    window.addEventListener("focus", onFocus);
+    return () => {
+      window.clearInterval(interval);
+      window.removeEventListener("focus", onFocus);
+    };
   }, []);
 
   const request = async (id: PermissionId) => {
     setRequesting(id);
     try {
-      await electron?.permissions.request(id);
+      const permissionGranted = await electron?.permissions.request(id);
+      if (id === "screen" || (id === "microphone" && !permissionGranted)) {
+        setRestartRequired(true);
+      }
       await refresh();
     } finally {
       setRequesting(null);
@@ -97,13 +108,21 @@ function PermissionsSlide({ onNext }: { onNext: () => void }) {
       title="Permissions"
       description="SuperApp needs these permissions to capture your screen and audio."
       footer={
-        <Button
-          onClick={onNext}
-          disabled={!allGranted}
-          className="mt-auto"
-        >
-          Continue
-        </Button>
+        restartRequired ? (
+          <div className="mt-auto flex flex-col gap-2">
+            <p className="text-xs text-muted-foreground text-center">
+              After enabling the permission in System Settings, restart SuperApp
+              so macOS can apply it.
+            </p>
+            <Button onClick={() => void electron?.restart()}>
+              Restart SuperApp
+            </Button>
+          </div>
+        ) : (
+          <Button onClick={onNext} disabled={!allGranted} className="mt-auto">
+            Continue
+          </Button>
+        )
       }
     >
       <div className="flex flex-col rounded-lg border border-border overflow-hidden">
@@ -119,7 +138,11 @@ function PermissionsSlide({ onNext }: { onNext: () => void }) {
               disabled={granted(permission.id) || requesting === permission.id}
               onClick={() => request(permission.id)}
             >
-              {granted(permission.id) ? "Granted" : "Grant"}
+              {granted(permission.id)
+                ? "Granted"
+                : status?.[permission.id] === "not-determined"
+                  ? "Grant"
+                  : "Open settings"}
             </Button>
           </div>
         ))}

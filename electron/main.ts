@@ -110,6 +110,42 @@ function showApplicationWindow() {
   );
 }
 
+function getPermissionStatus() {
+  return {
+    platform: process.platform,
+    screen:
+      process.platform === "darwin"
+        ? systemPreferences.getMediaAccessStatus("screen")
+        : "granted",
+    microphone:
+      process.platform === "darwin"
+        ? systemPreferences.getMediaAccessStatus("microphone")
+        : "granted",
+    accessibility:
+      process.platform === "darwin"
+        ? systemPreferences.isTrustedAccessibilityClient(false)
+          ? "granted"
+          : "denied"
+        : "granted",
+  };
+}
+
+function capturePermissionsGranted() {
+  const permissions = getPermissionStatus();
+  return permissions.screen === "granted" && permissions.microphone === "granted";
+}
+
+function openPermissionSettings(permission: "screen" | "microphone" | "accessibility") {
+  const pane = {
+    screen: "Privacy_ScreenCapture",
+    microphone: "Privacy_Microphone",
+    accessibility: "Privacy_Accessibility",
+  }[permission];
+  return shell.openExternal(
+    `x-apple.systempreferences:com.apple.preference.security?${pane}`,
+  );
+}
+
 const hasInstanceLock = app.requestSingleInstanceLock();
 if (!hasInstanceLock) {
   app.quit();
@@ -132,6 +168,11 @@ app.whenReady().then(async () => {
   getOrCreateWindow("setup");
   try {
     await runtime.start();
+    if (preferences.get("onboardingComplete") && capturePermissionsGranted()) {
+      await proxyApi("POST", "/engine/start").catch((error) =>
+        console.error("[main] capture engine could not auto-start:", error),
+      );
+    }
     showApplicationWindow();
   } catch (error) {
     console.error("[main] local runtime failed:", error);
@@ -169,6 +210,10 @@ ipcMain.handle("shell:open-external", (_event, url: string) => shell.openExterna
 ipcMain.handle("app:get-platform", () => process.platform);
 ipcMain.handle("app:get-version", () => app.getVersion());
 ipcMain.handle("app:quit", () => app.quit());
+ipcMain.handle("app:restart", () => {
+  app.relaunch();
+  app.quit();
+});
 ipcMain.handle("app:get-login-item-settings", () => app.getLoginItemSettings());
 ipcMain.handle("app:set-login-item-settings", (_event, openAtLogin: boolean) => {
   app.setLoginItemSettings({
@@ -203,32 +248,29 @@ ipcMain.handle("onboarding:complete", () => {
   preferences.set("onboardingComplete", true);
 });
 
-ipcMain.handle("permissions:get", () => ({
-  platform: process.platform,
-  screen:
-    process.platform === "darwin"
-      ? systemPreferences.getMediaAccessStatus("screen")
-      : "granted",
-  microphone:
-    process.platform === "darwin"
-      ? systemPreferences.getMediaAccessStatus("microphone")
-      : "granted",
-  accessibility:
-    process.platform === "darwin"
-      ? systemPreferences.isTrustedAccessibilityClient(false)
-        ? "granted"
-        : "denied"
-      : "granted",
-}));
+ipcMain.handle("permissions:get", () => getPermissionStatus());
 ipcMain.handle("permissions:request", async (_event, permission: string) => {
   if (process.platform !== "darwin") return true;
   if (permission === "microphone") {
+    const status = systemPreferences.getMediaAccessStatus("microphone");
+    if (status === "granted") return true;
+    if (status !== "not-determined") {
+      await openPermissionSettings("microphone");
+      return false;
+    }
     return systemPreferences.askForMediaAccess("microphone");
   }
   if (permission === "accessibility") {
+    if (systemPreferences.isTrustedAccessibilityClient(false)) return true;
     return systemPreferences.isTrustedAccessibilityClient(true);
   }
   if (permission === "screen") {
+    const status = systemPreferences.getMediaAccessStatus("screen");
+    if (status === "granted") return true;
+    if (status !== "not-determined") {
+      await openPermissionSettings("screen");
+      return false;
+    }
     try {
       await desktopCapturer.getSources({
         types: ["screen"],
