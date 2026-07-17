@@ -7,6 +7,7 @@ import { SettingsPage } from "@/pages/SettingsPage";
 import { OnboardingPage } from "@/pages/OnboardingPage";
 import { SearchPage } from "@/pages/SearchPage";
 import { ChatPage } from "@/pages/ChatPage";
+import { SetupPage } from "@/pages/SetupPage";
 import { useOnboardingStore } from "@/lib/stores/onboarding-store";
 import { Toaster } from "sonner";
 import { useGlobalShortcuts } from "@/lib/hooks/use-global-shortcuts";
@@ -42,6 +43,7 @@ function AppRoutes() {
         }
       />
       <Route path="/onboarding" element={<OnboardingPage />} />
+      <Route path="/setup" element={<SetupPage />} />
       <Route path="/search" element={<SearchPage />} />
       <Route path="/chat" element={<ChatPage />} />
       <Route path="*" element={<Navigate to="/home" replace />} />

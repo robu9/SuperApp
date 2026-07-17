@@ -7,10 +7,12 @@ import { DATA_DIR } from "../config.js";
 
 const execFileAsync = promisify(execFile);
 
-const SWIFT_SOURCE = path.resolve(
-  path.dirname(fileURLToPath(import.meta.url)),
-  "../../native/macos-ocr.swift"
-);
+const SWIFT_SOURCE = process.env.SUPERAPP_NATIVE_DIR
+  ? path.join(process.env.SUPERAPP_NATIVE_DIR, "macos-ocr.swift")
+  : path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../native/macos-ocr.swift"
+    );
 const BIN_DIR = path.join(DATA_DIR, "bin");
 const BIN_PATH = path.join(BIN_DIR, "macos-ocr");
 

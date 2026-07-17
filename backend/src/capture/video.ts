@@ -5,9 +5,10 @@ import fs from "fs";
 import path from "path";
 import { VIDEO_CHUNK_MAX_FRAMES, VIDEO_DIR, VIDEO_MAX_WIDTH } from "../config.js";
 import { finalizeVideoChunk, insertVideoChunk } from "../db/index.js";
+import { resolvePackagedExecutable } from "./executable-path.js";
 
 const execFileAsync = promisify(execFile);
-const FFMPEG = ffmpegInstaller.path;
+const FFMPEG = resolvePackagedExecutable(ffmpegInstaller.path);
 
 interface OpenChunk {
   chunkId: number;

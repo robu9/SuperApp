@@ -42,6 +42,55 @@ Production build:
 npm run build
 ```
 
+Platform builds and website:
+
+```bash
+npm run build:mac       # universal Intel + Apple Silicon DMG
+npm run build:linux     # x64 AppImage
+npm run build:site      # static Vercel landing page
+npm run test:runtime
+```
+
+The macOS command stages both architecture variants of Sharp, libvips, and
+FFmpeg in the dependency tree before electron-builder merges the app.
+This is required even when the build runs on Apple Silicon.
+
+## Production runtime
+
+The public desktop build is self-contained and does not require a system Node.js
+installation. Electron starts the local services in this order:
+
+1. Install the pinned Supermemory Local runtime on first launch.
+2. Start Supermemory and wait for port `6767` to become healthy.
+3. Start the capture backend in an Electron utility process and wait for port
+   `3030`.
+4. Open onboarding or the main window.
+
+Both managed services stop when SuperApp quits. Runtime binaries, credentials,
+and diagnostics live inside SuperApp's OS user-data directory; captured content
+continues to use `~/.superapp/`.
+
+The first-launch setup window exposes installation progress, retry, and the local
+runtime log. SuperApp never kills a process it did not start when a configured
+port is already occupied.
+
+### Publishing
+
+Pushing a `v*` tag runs `.github/workflows/release.yml`, which validates the app
+and site, builds a notarized universal DMG and x64 AppImage, creates SHA-256
+checksums, and publishes them to GitHub Releases. The macOS job requires these
+repository secrets:
+
+- `MAC_CSC_LINK` and `MAC_CSC_KEY_PASSWORD`
+- `APPLE_API_KEY`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`
+- `APPLE_TEAM_ID`
+
+Unsigned local macOS packaging can be tested with
+`CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:mac`.
+
+The Vercel project uses the root `vercel.json`, builds `site/`, and links its
+download buttons to the stable latest-release artifact names.
+
 ## Backend (capture engine)
 
 SuperApp ships with a local capture engine in `backend/` that exposes a **Screenpipe-compatible REST API** on `http://127.0.0.1:3030`.

@@ -1,0 +1,5 @@
+{
+  "supermemoryServerVersion": "0.0.5",
+  "supermemoryPort": 6767,
+  "backendPort": 3030
+}

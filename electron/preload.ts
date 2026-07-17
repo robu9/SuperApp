@@ -1,6 +1,7 @@
 import { contextBridge, ipcRenderer } from "electron";
+import type { ModelProvider, RuntimeStatus } from "./runtime-types.js";
 
-export type WindowKind = "home" | "settings" | "onboarding" | "search" | "chat";
+export type WindowKind = "setup" | "home" | "settings" | "onboarding" | "search" | "chat";
 
 const electronAPI = {
   openWindow: (kind: WindowKind) => ipcRenderer.invoke("window:open", kind),
@@ -20,6 +21,27 @@ const electronAPI = {
     resume: () => ipcRenderer.invoke("engine:resume"),
     status: () => ipcRenderer.invoke("engine:status"),
     health: () => ipcRenderer.invoke("engine:health"),
+  },
+  runtime: {
+    getStatus: () => ipcRenderer.invoke("runtime:get-status") as Promise<RuntimeStatus>,
+    retry: () => ipcRenderer.invoke("runtime:retry") as Promise<RuntimeStatus>,
+    openLogs: () => ipcRenderer.invoke("runtime:open-logs") as Promise<void>,
+    configureProvider: (provider: ModelProvider, apiKey: string) =>
+      ipcRenderer.invoke("runtime:configure-provider", provider, apiKey) as Promise<void>,
+    onStatusChanged: (callback: (status: RuntimeStatus) => void) => {
+      const handler = (_: unknown, status: RuntimeStatus) => callback(status);
+      ipcRenderer.on("runtime:status-changed", handler);
+      return () => ipcRenderer.removeListener("runtime:status-changed", handler);
+    },
+  },
+  onboarding: {
+    getComplete: () => ipcRenderer.invoke("onboarding:get-complete") as Promise<boolean>,
+    complete: () => ipcRenderer.invoke("onboarding:complete") as Promise<void>,
+  },
+  permissions: {
+    get: () => ipcRenderer.invoke("permissions:get"),
+    request: (permission: "screen" | "microphone" | "accessibility") =>
+      ipcRenderer.invoke("permissions:request", permission) as Promise<boolean>,
   },
   onThemeChanged: (callback: (theme: string) => void) => {
     const handler = (_: unknown, theme: string) => callback(theme);

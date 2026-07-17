@@ -1,8 +1,8 @@
-import { spawn, type ChildProcess } from "child_process";
+import { type ChildProcess } from "child_process";
 import { execFile } from "child_process";
 import { existsSync, readFileSync } from "fs";
 import { promisify } from "util";
-import { app } from "electron";
+import { app, utilityProcess, type UtilityProcess } from "electron";
 import path from "path";
 import { fileURLToPath } from "url";
 import os from "os";
@@ -13,6 +13,7 @@ const API_PORT = Number(process.env.SUPERAPP_PORT ?? 3030);
 const API_URL = `http://127.0.0.1:${API_PORT}`;
 
 let backendProcess: ChildProcess | null = null;
+let backendUtilityProcess: UtilityProcess | null = null;
 
 function loadEnvFile(envPath: string): Record<string, string> {
   const vars: Record<string, string> = {};
@@ -60,7 +61,9 @@ function getBackendEntry(): { command: string; args: string[]; cwd: string } {
   return {
     command: "node",
     args: [path.join(backendDir, "dist", "index.js")],
-    cwd: backendDir,
+    // An ASAR path is readable by Node but cannot be used as an OS working
+    // directory. Runtime data is explicitly routed to ~/.superapp below.
+    cwd: app.getPath("userData"),
   };
 }
 
@@ -127,28 +130,9 @@ async function waitForPortFree(
   }
 }
 
-async function killProcessOnPort(port: number): Promise<void> {
-  const pids = await getPidsOnPort(port);
-
-  for (const pid of pids) {
-    if (pid === process.pid) continue;
-    try {
-      if (process.platform === "win32") {
-        await execFileAsync("taskkill", ["/PID", String(pid), "/F", "/T"]);
-      } else {
-        process.kill(pid, "SIGTERM");
-      }
-    } catch {
-      // already gone
-    }
-  }
-  if (pids.length > 0) {
-    await new Promise((r) => setTimeout(r, 1000));
-  }
-  await waitForPortFree(port);
-}
-
-export async function startBackend(): Promise<void> {
+export async function startBackend(
+  envOverrides: NodeJS.ProcessEnv = {}
+): Promise<void> {
   // In dev, scripts/dev.mjs owns the backend process. Electron only connects so
   // main-process hot-reload does not kill ffmpeg/audio children on Windows.
   if (!app.isPackaged) {
@@ -162,14 +146,14 @@ export async function startBackend(): Promise<void> {
     return;
   }
 
-  if (backendProcess && !backendProcess.killed) {
+  if (backendUtilityProcess) {
     const hasChat = await backendHasChatRoute();
     if (hasChat) {
       await waitForHealth(5);
       return;
     }
-    backendProcess.kill("SIGTERM");
-    backendProcess = null;
+    backendUtilityProcess.kill();
+    backendUtilityProcess = null;
   }
 
   const hasChat = await backendHasChatRoute();
@@ -177,36 +161,32 @@ export async function startBackend(): Promise<void> {
     await waitForHealth(5);
     return;
   } else {
-    await killProcessOnPort(API_PORT);
+    const pids = await getPidsOnPort(API_PORT);
+    if (pids.length > 0) {
+      throw new Error(`Port ${API_PORT} is already in use by another process`);
+    }
   }
 
-  const { command, args, cwd } = getBackendEntry();
-
-  backendProcess = spawn(command, args, {
+  const { args, cwd } = getBackendEntry();
+  const entry = args[0];
+  backendUtilityProcess = utilityProcess.fork(entry, [], {
     cwd,
-    env: getEnvForBackend(),
-    stdio: ["ignore", "pipe", "pipe"],
-    windowsHide: true,
+    env: { ...getEnvForBackend(), ...envOverrides },
+    stdio: "pipe",
+    serviceName: "SuperApp Capture Engine",
   });
 
-  backendProcess.stdout?.on("data", (chunk: Buffer) => {
+  backendUtilityProcess.stdout?.on("data", (chunk: Buffer) => {
     console.log(`[backend] ${chunk.toString().trim()}`);
   });
 
-  backendProcess.stderr?.on("data", (chunk: Buffer) => {
+  backendUtilityProcess.stderr?.on("data", (chunk: Buffer) => {
     console.error(`[backend] ${chunk.toString().trim()}`);
   });
 
-  backendProcess.on("error", (err) => {
-    console.error(
-      `[backend] failed to spawn (is "node" on PATH?): ${err.message}`
-    );
-    backendProcess = null;
-  });
-
-  backendProcess.on("exit", (code) => {
+  backendUtilityProcess.on("exit", (code) => {
     console.log(`[backend] exited with code ${code}`);
-    backendProcess = null;
+    backendUtilityProcess = null;
   });
 
   await waitForHealth(30);
@@ -219,6 +199,10 @@ export async function startBackend(): Promise<void> {
 
 export function stopBackend(): void {
   if (!app.isPackaged) return;
+  if (backendUtilityProcess) {
+    backendUtilityProcess.kill();
+    backendUtilityProcess = null;
+  }
   if (backendProcess && !backendProcess.killed) {
     backendProcess.kill("SIGTERM");
     backendProcess = null;

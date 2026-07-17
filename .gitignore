@@ -5,6 +5,7 @@ dist-types/
 dist/
 dist-electron/
 release/
+build/icon.iconset/
 .aidesigner/runs/
 screenpipe-main/
 .env

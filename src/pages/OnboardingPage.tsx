@@ -6,7 +6,7 @@ import {
   ONBOARDING_SIZES,
   type OnboardingStep,
 } from "@/lib/stores/onboarding-store";
-import { electron } from "@/lib/electron";
+import { electron, type PermissionStatus } from "@/lib/electron";
 import { api, type ConnectorInfo } from "@/lib/api/client";
 
 const STEPS: OnboardingStep[] = ["login", "permissions", "engine", "connect-apps", "pipe"];
@@ -48,7 +48,10 @@ function LoginSlide({ onNext }: { onNext: () => void }) {
       <Button onClick={onNext} className="w-full max-w-xs">
         Sign in
       </Button>
-      <button className="text-sm text-muted-foreground hover:text-foreground transition-colors">
+      <button
+        onClick={onNext}
+        className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+      >
         Continue without account
       </button>
     </div>
@@ -56,12 +59,38 @@ function LoginSlide({ onNext }: { onNext: () => void }) {
 }
 
 function PermissionsSlide({ onNext }: { onNext: () => void }) {
-  const perms = [
-    { name: "Screen recording", granted: false },
-    { name: "Microphone", granted: false },
-    { name: "Accessibility", granted: false },
+  type PermissionId = "screen" | "microphone" | "accessibility";
+
+  const permissions: Array<{ id: PermissionId; name: string }> = [
+    { id: "screen", name: "Screen recording" },
+    { id: "microphone", name: "Microphone" },
+    { id: "accessibility", name: "Accessibility" },
   ];
-  const [granted, setGranted] = useState(perms);
+  const [status, setStatus] = useState<PermissionStatus | null>(null);
+  const [requesting, setRequesting] = useState<PermissionId | null>(null);
+
+  const refresh = async () => {
+    const next = await electron?.permissions.get();
+    if (next) setStatus(next);
+  };
+
+  useEffect(() => {
+    void refresh();
+  }, []);
+
+  const request = async (id: PermissionId) => {
+    setRequesting(id);
+    try {
+      await electron?.permissions.request(id);
+      await refresh();
+    } finally {
+      setRequesting(null);
+    }
+  };
+
+  const granted = (id: PermissionId) =>
+    status?.[id] === "granted";
+  const allGranted = permissions.every((permission) => granted(permission.id));
 
   return (
     <OnboardingShell
@@ -70,7 +99,7 @@ function PermissionsSlide({ onNext }: { onNext: () => void }) {
       footer={
         <Button
           onClick={onNext}
-          disabled={!granted.every((p) => p.granted)}
+          disabled={!allGranted}
           className="mt-auto"
         >
           Continue
@@ -78,22 +107,19 @@ function PermissionsSlide({ onNext }: { onNext: () => void }) {
       }
     >
       <div className="flex flex-col rounded-lg border border-border overflow-hidden">
-        {granted.map((p, i) => (
+        {permissions.map((permission) => (
           <div
-            key={p.name}
+            key={permission.id}
             className="flex items-center justify-between px-4 py-3 border-b border-border last:border-b-0"
           >
-            <span className="text-sm font-medium">{p.name}</span>
+            <span className="text-sm font-medium">{permission.name}</span>
             <Button
-              variant={p.granted ? "outline" : "default"}
+              variant={granted(permission.id) ? "outline" : "default"}
               size="sm"
-              onClick={() =>
-                setGranted((prev) =>
-                  prev.map((item, j) => (j === i ? { ...item, granted: true } : item))
-                )
-              }
+              disabled={granted(permission.id) || requesting === permission.id}
+              onClick={() => request(permission.id)}
             >
-              {p.granted ? "Granted" : "Grant"}
+              {granted(permission.id) ? "Granted" : "Grant"}
             </Button>
           </div>
         ))}
@@ -318,8 +344,12 @@ function PickWorkflowSlide({ onComplete }: { onComplete: () => void }) {
 }
 
 export function OnboardingPage() {
-  const { currentStep, isCompleted, setStep, complete } = useOnboardingStore();
+  const { currentStep, isCompleted, setStep, complete, setCompleted } = useOnboardingStore();
   const [visible, setVisible] = useState(true);
+
+  useEffect(() => {
+    void electron?.onboarding.getComplete().then(setCompleted);
+  }, [setCompleted]);
 
   useEffect(() => {
     const size = ONBOARDING_SIZES[currentStep];
@@ -346,6 +376,7 @@ export function OnboardingPage() {
 
   const handleComplete = () => {
     complete();
+    void electron?.onboarding.complete();
   };
 
   return (

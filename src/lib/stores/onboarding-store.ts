@@ -8,6 +8,7 @@ interface OnboardingState {
   isCompleted: boolean;
   setStep: (step: OnboardingStep) => void;
   complete: () => void;
+  setCompleted: (completed: boolean) => void;
   reset: () => void;
 }
 
@@ -18,6 +19,7 @@ export const useOnboardingStore = create<OnboardingState>()(
       isCompleted: false,
       setStep: (step) => set({ currentStep: step }),
       complete: () => set({ isCompleted: true }),
+      setCompleted: (isCompleted) => set({ isCompleted }),
       reset: () => set({ currentStep: "login", isCompleted: false }),
     }),
     { name: "superapp-onboarding" }

@@ -1,17 +1,28 @@
-import { app, BrowserWindow, ipcMain, shell } from "electron";
-import path from "path";
-import { fileURLToPath } from "url";
 import {
-  getApiUrl,
-  proxyApi,
-  startBackend,
-  stopBackend,
-} from "./backend-manager.js";
+  app,
+  BrowserWindow,
+  desktopCapturer,
+  ipcMain,
+  shell,
+  systemPreferences,
+} from "electron";
+import Store from "electron-store";
+import path from "node:path";
+import { fileURLToPath } from "node:url";
+import { getApiUrl, proxyApi } from "./backend-manager.js";
+import { RuntimeManager } from "./runtime-manager.js";
+import type { ModelProvider } from "./runtime-types.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const isDev = !app.isPackaged;
 
-type WindowKind = "home" | "settings" | "onboarding" | "search" | "chat";
+type WindowKind =
+  | "setup"
+  | "home"
+  | "settings"
+  | "onboarding"
+  | "search"
+  | "chat";
 
 interface WindowConfig {
   width: number;
@@ -23,14 +34,28 @@ interface WindowConfig {
 }
 
 const WINDOW_CONFIGS: Record<WindowKind, WindowConfig> = {
+  setup: { width: 520, height: 520, resizable: false, route: "/setup" },
   home: { width: 1280, height: 800, route: "/home" },
   settings: { width: 1100, height: 760, route: "/settings" },
   onboarding: { width: 500, height: 560, route: "/onboarding" },
-  search: { width: 720, height: 520, transparent: true, frame: false, route: "/search" },
+  search: {
+    width: 720,
+    height: 520,
+    transparent: true,
+    frame: false,
+    route: "/search",
+  },
   chat: { width: 900, height: 700, route: "/chat" },
 };
 
+const preferences = new Store<{ onboardingComplete: boolean }>({
+  name: "preferences",
+  defaults: { onboardingComplete: false },
+});
+const runtime = new RuntimeManager();
 const windows = new Map<WindowKind, BrowserWindow>();
+let quitting = false;
+let servicesStopped = false;
 
 function getPreloadPath() {
   return path.join(__dirname, "preload.mjs");
@@ -41,8 +66,8 @@ function createWindow(kind: WindowKind): BrowserWindow {
   const win = new BrowserWindow({
     width: config.width,
     height: config.height,
-    minWidth: kind === "onboarding" ? 500 : 800,
-    minHeight: kind === "onboarding" ? 480 : 600,
+    minWidth: kind === "setup" || kind === "onboarding" ? 500 : 800,
+    minHeight: kind === "setup" || kind === "onboarding" ? 480 : 600,
     show: false,
     frame: config.frame !== false,
     transparent: config.transparent ?? false,
@@ -60,17 +85,9 @@ function createWindow(kind: WindowKind): BrowserWindow {
   const url = isDev
     ? `http://localhost:1420/#${config.route}`
     : `file://${path.join(__dirname, "../dist/index.html")}#${config.route}`;
-
-  win.loadURL(url);
-
-  win.once("ready-to-show", () => {
-    win.show();
-  });
-
-  win.on("closed", () => {
-    windows.delete(kind);
-  });
-
+  void win.loadURL(url);
+  win.once("ready-to-show", () => win.show());
+  win.on("closed", () => windows.delete(kind));
   windows.set(kind, win);
   return win;
 }
@@ -85,68 +102,139 @@ function getOrCreateWindow(kind: WindowKind): BrowserWindow {
   return createWindow(kind);
 }
 
-app.whenReady().then(async () => {
-  try {
-    await startBackend();
-    console.log(`[main] backend ready at ${getApiUrl()}`);
-  } catch (err) {
-    console.error("[main] backend failed to start:", err);
-  }
+function showApplicationWindow() {
+  const setup = windows.get("setup");
+  if (setup && !setup.isDestroyed()) setup.close();
+  getOrCreateWindow(
+    preferences.get("onboardingComplete") ? "home" : "onboarding"
+  );
+}
 
-  const onboardingComplete = true; // checked via renderer store; default to home for dev
-  if (onboardingComplete) {
-    getOrCreateWindow("home");
-  } else {
-    getOrCreateWindow("onboarding");
+const hasInstanceLock = app.requestSingleInstanceLock();
+if (!hasInstanceLock) {
+  app.quit();
+} else {
+  app.on("second-instance", () => {
+    const target = windows.get("home") ?? windows.get("onboarding") ?? windows.get("setup");
+    if (target?.isMinimized()) target.restore();
+    target?.show();
+    target?.focus();
+  });
+}
+
+runtime.subscribe((status) => {
+  for (const win of windows.values()) {
+    if (!win.isDestroyed()) win.webContents.send("runtime:status-changed", status);
+  }
+});
+
+app.whenReady().then(async () => {
+  getOrCreateWindow("setup");
+  try {
+    await runtime.start();
+    showApplicationWindow();
+  } catch (error) {
+    console.error("[main] local runtime failed:", error);
   }
 
   app.on("activate", () => {
     if (BrowserWindow.getAllWindows().length === 0) {
-      getOrCreateWindow("home");
+      if (runtime.getStatus().phase === "ready") showApplicationWindow();
+      else getOrCreateWindow("setup");
     }
   });
 });
 
-app.on("before-quit", () => {
-  stopBackend();
+app.on("before-quit", (event) => {
+  if (servicesStopped) return;
+  event.preventDefault();
+  if (quitting) return;
+  quitting = true;
+  void runtime.stop().finally(() => {
+    servicesStopped = true;
+    app.quit();
+  });
 });
 
 app.on("window-all-closed", () => {
-  if (process.platform !== "darwin") {
-    app.quit();
-  }
+  if (process.platform !== "darwin") app.quit();
 });
 
-ipcMain.handle("window:open", (_event, kind: WindowKind) => {
-  getOrCreateWindow(kind);
-});
-
-ipcMain.handle("window:close", (event) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  win?.close();
-});
-
-ipcMain.handle("window:set-size", (event, width: number, height: number) => {
-  const win = BrowserWindow.fromWebContents(event.sender);
-  win?.setSize(width, height);
-});
-
-ipcMain.handle("shell:open-external", (_event, url: string) => {
-  return shell.openExternal(url);
-});
-
+ipcMain.handle("window:open", (_event, kind: WindowKind) => getOrCreateWindow(kind));
+ipcMain.handle("window:close", (event) => BrowserWindow.fromWebContents(event.sender)?.close());
+ipcMain.handle("window:set-size", (event, width: number, height: number) =>
+  BrowserWindow.fromWebContents(event.sender)?.setSize(width, height)
+);
+ipcMain.handle("shell:open-external", (_event, url: string) => shell.openExternal(url));
 ipcMain.handle("app:get-platform", () => process.platform);
+ipcMain.handle("app:quit", () => app.quit());
 
-ipcMain.handle("app:quit", () => {
-  app.quit();
+ipcMain.handle("runtime:get-status", () => runtime.getStatus());
+ipcMain.handle("runtime:retry", async () => {
+  await runtime.retry();
+  showApplicationWindow();
+  return runtime.getStatus();
+});
+ipcMain.handle("runtime:open-logs", () => runtime.openLogs());
+ipcMain.handle(
+  "runtime:configure-provider",
+  (_event, provider: ModelProvider, apiKey: string) =>
+    runtime.configureProvider(provider, apiKey)
+);
+
+ipcMain.handle("onboarding:get-complete", () =>
+  preferences.get("onboardingComplete")
+);
+ipcMain.handle("onboarding:complete", () => {
+  preferences.set("onboardingComplete", true);
+});
+
+ipcMain.handle("permissions:get", () => ({
+  platform: process.platform,
+  screen:
+    process.platform === "darwin"
+      ? systemPreferences.getMediaAccessStatus("screen")
+      : "granted",
+  microphone:
+    process.platform === "darwin"
+      ? systemPreferences.getMediaAccessStatus("microphone")
+      : "granted",
+  accessibility:
+    process.platform === "darwin"
+      ? systemPreferences.isTrustedAccessibilityClient(false)
+        ? "granted"
+        : "denied"
+      : "granted",
+}));
+ipcMain.handle("permissions:request", async (_event, permission: string) => {
+  if (process.platform !== "darwin") return true;
+  if (permission === "microphone") {
+    return systemPreferences.askForMediaAccess("microphone");
+  }
+  if (permission === "accessibility") {
+    return systemPreferences.isTrustedAccessibilityClient(true);
+  }
+  if (permission === "screen") {
+    try {
+      await desktopCapturer.getSources({
+        types: ["screen"],
+        thumbnailSize: { width: 1, height: 1 },
+      });
+    } catch (error) {
+      console.warn("Unable to request screen capture permission:", error);
+      return false;
+    }
+    return systemPreferences.getMediaAccessStatus("screen") === "granted";
+  }
+  return false;
 });
 
 ipcMain.handle("api:get-url", () => getApiUrl());
-
-ipcMain.handle("api:request", async (_event, method: string, path: string, body?: unknown) => {
-  return proxyApi(method, path, body);
-});
-
+ipcMain.handle(
+  "api:request",
+  async (_event, method: string, requestPath: string, body?: unknown) =>
+    proxyApi(method, requestPath, body)
+);
 ipcMain.handle("engine:start", async () => proxyApi("POST", "/engine/start"));
 ipcMain.handle("engine:stop", async () => proxyApi("POST", "/engine/stop"));
 ipcMain.handle("engine:pause", async () => proxyApi("POST", "/engine/pause"));

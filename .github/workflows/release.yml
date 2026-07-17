@@ -1,0 +1,89 @@
+name: Release desktop apps
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            backend/package-lock.json
+            site/package-lock.json
+      - run: npm ci
+      - run: npm ci --prefix site
+      - run: npm run typecheck
+      - run: npm run backend:build
+      - run: npm run test:runtime
+      - run: npm run build:site
+
+  macos:
+    needs: validate
+    runs-on: macos-15
+    env:
+      CSC_LINK: ${{ secrets.MAC_CSC_LINK }}
+      CSC_KEY_PASSWORD: ${{ secrets.MAC_CSC_KEY_PASSWORD }}
+      APPLE_API_KEY: ${{ secrets.APPLE_API_KEY }}
+      APPLE_API_KEY_ID: ${{ secrets.APPLE_API_KEY_ID }}
+      APPLE_API_ISSUER: ${{ secrets.APPLE_API_ISSUER }}
+      APPLE_TEAM_ID: ${{ secrets.APPLE_TEAM_ID }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - name: Require production signing credentials
+        run: test -n "$CSC_LINK" && test -n "$APPLE_API_KEY" && test -n "$APPLE_API_KEY_ID" && test -n "$APPLE_API_ISSUER"
+      - run: npm run build:mac
+      - run: shasum -a 256 release/SuperApp-universal.dmg > release/SuperApp-universal.dmg.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: macos-release
+          path: |
+            release/SuperApp-universal.dmg
+            release/SuperApp-universal.dmg.sha256
+
+  linux:
+    needs: validate
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build:linux
+      - run: sha256sum release/SuperApp-x86_64.AppImage > release/SuperApp-x86_64.AppImage.sha256
+      - uses: actions/upload-artifact@v4
+        with:
+          name: linux-release
+          path: |
+            release/SuperApp-x86_64.AppImage
+            release/SuperApp-x86_64.AppImage.sha256
+
+  publish:
+    needs: [macos, linux]
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/download-artifact@v4
+        with:
+          path: artifacts
+          merge-multiple: true
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "${GITHUB_REF_NAME}" artifacts/* --generate-notes --verify-tag

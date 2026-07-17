@@ -11,10 +11,11 @@ import {
   createMeeting,
 } from "../db/meetings.js";
 import { transcribeChunk as transcribeChunkAudio } from "./stt.js";
+import { resolvePackagedExecutable } from "./executable-path.js";
 import type { AudioDeviceInfo } from "../types.js";
 
 const execFileAsync = promisify(execFile);
-const FFMPEG = ffmpegInstaller.path;
+const FFMPEG = resolvePackagedExecutable(ffmpegInstaller.path);
 
 class AudioRecorder {
   private recording = false;
