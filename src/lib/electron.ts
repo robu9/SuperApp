@@ -13,7 +13,11 @@ export interface ElectronAPI {
   setWindowSize: (width: number, height: number) => Promise<void>;
   openExternal: (url: string) => Promise<void>;
   getPlatform: () => Promise<NodeJS.Platform>;
+  getVersion: () => Promise<string>;
   quit: () => Promise<void>;
+  getLoginItemSettings: () => Promise<{ openAtLogin: boolean; openAsHidden?: boolean }>;
+  setLoginItemSettings: (openAtLogin: boolean) => Promise<{ openAtLogin: boolean; openAsHidden?: boolean }>;
+  openPath: (targetPath: string) => Promise<string>;
   getApiUrl: () => Promise<string>;
   apiRequest: (method: string, path: string, body?: unknown) => Promise<unknown>;
   engine: {
@@ -29,6 +33,7 @@ export interface ElectronAPI {
     retry: () => Promise<RuntimeStatus>;
     openLogs: () => Promise<void>;
     configureProvider: (provider: ModelProvider, apiKey: string) => Promise<void>;
+    getProviderInfo: () => Promise<{ provider: ModelProvider | null; configured: boolean }>;
     onStatusChanged: (callback: (status: RuntimeStatus) => void) => () => void;
   };
   onboarding: {

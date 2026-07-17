@@ -167,7 +167,21 @@ ipcMain.handle("window:set-size", (event, width: number, height: number) =>
 );
 ipcMain.handle("shell:open-external", (_event, url: string) => shell.openExternal(url));
 ipcMain.handle("app:get-platform", () => process.platform);
+ipcMain.handle("app:get-version", () => app.getVersion());
 ipcMain.handle("app:quit", () => app.quit());
+ipcMain.handle("app:get-login-item-settings", () => app.getLoginItemSettings());
+ipcMain.handle("app:set-login-item-settings", (_event, openAtLogin: boolean) => {
+  app.setLoginItemSettings({
+    openAtLogin,
+    openAsHidden: true,
+    args: openAtLogin ? ["--hidden"] : [],
+  });
+  return app.getLoginItemSettings();
+});
+ipcMain.handle("app:open-path", (_event, targetPath: string) =>
+  shell.openPath(targetPath)
+);
+ipcMain.handle("runtime:get-provider-info", () => runtime.getProviderInfo());
 
 ipcMain.handle("runtime:get-status", () => runtime.getStatus());
 ipcMain.handle("runtime:retry", async () => {

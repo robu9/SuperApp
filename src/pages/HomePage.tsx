@@ -52,8 +52,7 @@ const NAV_ITEMS: { id: MainSection; label: string; icon: React.ElementType }[] =
 ];
 
 const SETTINGS_SECTIONS = new Set([
-  "account", "recording", "ai", "general", "display", "shortcuts",
-  "notifications", "privacy", "storage", "team", "referral", "usage", "speakers",
+  "display", "general", "recording", "ai", "shortcuts", "privacy", "storage",
 ]);
 
 export function HomePage() {

@@ -19,6 +19,14 @@ export interface SearchResponse {
   pagination: { limit: number; offset: number; total: number };
 }
 
+export interface AppConfig {
+  model: string;
+  ocr_enabled: boolean;
+  audio_enabled: boolean;
+  stt_engine: string;
+  data_dir: string;
+}
+
 export interface HealthResponse {
   status: string;
   last_frame_timestamp: string | null;
@@ -226,6 +234,7 @@ async function request<T>(
 }
 
 export const api = {
+  config: () => request<AppConfig>("GET", "/config"),
   health: () => request<HealthResponse>("GET", "/health"),
   search: (params: {
     q?: string;

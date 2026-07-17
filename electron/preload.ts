@@ -10,7 +10,20 @@ const electronAPI = {
     ipcRenderer.invoke("window:set-size", width, height),
   openExternal: (url: string) => ipcRenderer.invoke("shell:open-external", url),
   getPlatform: () => ipcRenderer.invoke("app:get-platform") as Promise<NodeJS.Platform>,
+  getVersion: () => ipcRenderer.invoke("app:get-version") as Promise<string>,
   quit: () => ipcRenderer.invoke("app:quit"),
+  getLoginItemSettings: () =>
+    ipcRenderer.invoke("app:get-login-item-settings") as Promise<{
+      openAtLogin: boolean;
+      openAsHidden?: boolean;
+    }>,
+  setLoginItemSettings: (openAtLogin: boolean) =>
+    ipcRenderer.invoke("app:set-login-item-settings", openAtLogin) as Promise<{
+      openAtLogin: boolean;
+      openAsHidden?: boolean;
+    }>,
+  openPath: (targetPath: string) =>
+    ipcRenderer.invoke("app:open-path", targetPath) as Promise<string>,
   getApiUrl: () => ipcRenderer.invoke("api:get-url") as Promise<string>,
   apiRequest: (method: string, path: string, body?: unknown) =>
     ipcRenderer.invoke("api:request", method, path, body) as Promise<unknown>,
@@ -28,6 +41,11 @@ const electronAPI = {
     openLogs: () => ipcRenderer.invoke("runtime:open-logs") as Promise<void>,
     configureProvider: (provider: ModelProvider, apiKey: string) =>
       ipcRenderer.invoke("runtime:configure-provider", provider, apiKey) as Promise<void>,
+    getProviderInfo: () =>
+      ipcRenderer.invoke("runtime:get-provider-info") as Promise<{
+        provider: ModelProvider | null;
+        configured: boolean;
+      }>,
     onStatusChanged: (callback: (status: RuntimeStatus) => void) => {
       const handler = (_: unknown, status: RuntimeStatus) => callback(status);
       ipcRenderer.on("runtime:status-changed", handler);

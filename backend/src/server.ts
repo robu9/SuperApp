@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { API_HOST, API_PORT, AUDIO_ENABLED, GEMINI_MODEL, STT_ENGINE } from "./config.js";
+import { API_HOST, API_PORT, AUDIO_ENABLED, DATA_DIR, GEMINI_MODEL, OCR_ENABLED, STT_ENGINE } from "./config.js";
 import { captureEngine } from "./capture/engine.js";
 import {
   isAudioRecording,
@@ -78,6 +78,16 @@ const app = new Hono();
 const startTime = Date.now();
 
 app.use("*", cors());
+
+app.get("/config", (c) => {
+  return c.json({
+    model: GEMINI_MODEL,
+    ocr_enabled: OCR_ENABLED,
+    audio_enabled: AUDIO_ENABLED,
+    stt_engine: STT_ENGINE,
+    data_dir: DATA_DIR,
+  });
+});
 
 app.get("/health", (c) => {
   const stats = getStats();

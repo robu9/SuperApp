@@ -115,6 +115,37 @@ export class RuntimeManager {
     await shell.showItemInFolder(log);
   }
 
+  getProviderInfo(): { provider: ModelProvider | null; configured: boolean } {
+    if (
+      process.env.GEMINI_API_KEY ||
+      process.env.OPENAI_API_KEY ||
+      process.env.ANTHROPIC_API_KEY
+    ) {
+      const provider = process.env.GEMINI_API_KEY
+        ? "gemini"
+        : process.env.OPENAI_API_KEY
+          ? "openai"
+          : "anthropic";
+      return { provider, configured: true };
+    }
+    const providerPath = this.paths().provider;
+    if (!existsSync(providerPath)) return { provider: null, configured: false };
+    try {
+      const stored = JSON.parse(readFileSync(providerPath, "utf8")) as {
+        encrypted: boolean;
+        content: string;
+      };
+      const buffer = Buffer.from(stored.content, "base64");
+      const payload = stored.encrypted
+        ? safeStorage.decryptString(buffer)
+        : buffer.toString("utf8");
+      const value = JSON.parse(payload) as { provider: ModelProvider };
+      return { provider: value.provider, configured: true };
+    } catch {
+      return { provider: null, configured: false };
+    }
+  }
+
   configureProvider(provider: ModelProvider, apiKey: string) {
     const key = apiKey.trim();
     if (!key) throw new Error("API key is required");

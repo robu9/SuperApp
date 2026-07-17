@@ -8,6 +8,7 @@ export interface AppSettings {
   translucentSidebar: boolean;
   disableTimeline: boolean;
   fontSize: number;
+  launchAtStartup: boolean;
 }
 
 interface SettingsState {
@@ -23,6 +24,7 @@ export const useSettingsStore = create<SettingsState>()(
         translucentSidebar: true,
         disableTimeline: false,
         fontSize: 16,
+        launchAtStartup: false,
       },
       setSetting: (key, value) =>
         set((state) => ({
