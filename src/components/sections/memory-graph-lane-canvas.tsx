@@ -1,18 +1,12 @@
 import React, { useEffect, useMemo, useRef, useState } from "react";
 import type { GraphLane } from "@/lib/memory-graph-layout";
-import {
-  getFocusSet,
-  isLinkFocused,
-  layoutLaneNodes,
-  layoutStoryNodes,
-} from "@/lib/memory-graph-layout";
+import { getFocusSet, isLinkFocused, layoutLaneNodes } from "@/lib/memory-graph-layout";
 import { linkEndpointId } from "@/lib/memory-graph";
 import type { GraphLink, GraphNode, MemoryGraphData } from "@/components/sections/memory-graph-canvas";
 
 interface MemoryGraphLaneCanvasProps {
   data: MemoryGraphData;
   lanes: GraphLane[];
-  mode: "flow" | "type" | "story";
   focusId: string | null;
   onFocus: (id: string | null) => void;
   onSelect: (id: string) => void;
@@ -35,40 +29,58 @@ function nodeFill(type: string, focused: boolean, active: boolean): string {
 export function MemoryGraphLaneCanvas({
   data,
   lanes,
-  mode,
   focusId,
   onFocus,
   onSelect,
 }: MemoryGraphLaneCanvasProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const [size, setSize] = useState({ width: 800, height: 600 });
+  const shellRef = useRef<HTMLDivElement>(null);
+  const [size, setSize] = useState({ width: 0, height: 0 });
   const [hoverId, setHoverId] = useState<string | null>(null);
 
   const activeId = focusId ?? hoverId;
   const focus = useMemo(() => getFocusSet(data, activeId), [data, activeId]);
-  const headerOffset = 40;
+  const headerOffset = 36;
 
   useEffect(() => {
-    const el = containerRef.current;
+    const el = shellRef.current;
     if (!el) return;
-    const observer = new ResizeObserver((entries) => {
-      const entry = entries[0];
-      if (!entry) return;
-      setSize({
-        width: entry.contentRect.width,
-        height: entry.contentRect.height,
-      });
-    });
+
+    const measure = () => {
+      const rect = el.getBoundingClientRect();
+      const next = {
+        width: Math.max(Math.floor(rect.width), 1),
+        height: Math.max(Math.floor(rect.height), 1),
+      };
+      setSize((prev) =>
+        prev.width === next.width && prev.height === next.height ? prev : next
+      );
+    };
+
+    measure();
+    const raf = requestAnimationFrame(measure);
+    const observer = new ResizeObserver(measure);
     observer.observe(el);
-    return () => observer.disconnect();
+    return () => {
+      cancelAnimationFrame(raf);
+      observer.disconnect();
+    };
   }, []);
 
-  const { positions, contentHeight, contentWidth } = useMemo(() => {
-    if (mode === "story") {
-      return layoutStoryNodes(data.nodes, size.width, size.height, 48, headerOffset);
-    }
-    return layoutLaneNodes(data.nodes, lanes, size.width, size.height, 48, headerOffset);
-  }, [data.nodes, lanes, mode, size.height, size.width]);
+  const layoutWidth = size.width;
+  const layoutHeight = Math.max(size.height - headerOffset, 1);
+
+  const { positions, contentHeight, laneLayouts } = useMemo(
+    () =>
+      layoutWidth > 0
+        ? layoutLaneNodes(data.nodes, lanes, layoutWidth, layoutHeight, 0, 0)
+        : {
+            positions: new Map(),
+            contentHeight: layoutHeight,
+            contentWidth: 0,
+            laneLayouts: [] as { id: string; left: number; width: number }[],
+          },
+    [data.nodes, lanes, layoutHeight, layoutWidth]
+  );
 
   const laneCounts = useMemo(() => {
     const counts: Record<string, number> = {};
@@ -80,31 +92,49 @@ export function MemoryGraphLaneCanvas({
     return counts;
   }, [data.nodes, lanes]);
 
-  const svgHeight = Math.max(size.height, contentHeight);
-  const svgWidth = Math.max(size.width, contentWidth);
+  const svgHeight = Math.max(layoutHeight, contentHeight);
+  const svgWidth = layoutWidth;
 
-  const renderNodeLabel = (node: GraphNode) => {
-    const label = node.label.length > 44 ? `${node.label.slice(0, 42)}…` : node.label;
-    const width = Math.min(Math.max(label.length * 5.8 + 16, 72), 240);
+  const truncateLabel = (label: string, maxWidth: number): string => {
+    const maxChars = Math.max(6, Math.floor(maxWidth / 5.4));
+    if (label.length <= maxChars) return label;
+    return `${label.slice(0, Math.max(1, maxChars - 1))}…`;
+  };
 
-    if (mode === "story") {
+  const renderNodeLabel = (
+    node: GraphNode,
+    maxWidth: number,
+    inFocus: boolean,
+    isActive: boolean
+  ) => {
+    const label = truncateLabel(node.label, maxWidth);
+    const labelY = 11;
+
+    if (isActive) {
+      const boxWidth = Math.min(maxWidth, Math.max(label.length * 5.6 + 14, 56));
       return (
-        <g>
+        <g opacity={inFocus ? 1 : 0.35}>
+          <title>{node.label}</title>
           <rect
-            x={-width / 2}
-            y={-34}
-            width={width}
-            height={20}
+            x={-boxWidth / 2}
+            y={labelY - 2}
+            width={boxWidth}
+            height={16}
+            rx={3}
             fill="hsl(var(--background))"
             stroke="hsl(var(--foreground))"
             strokeWidth={1}
           />
           <text
             x={0}
-            y={-20}
+            y={labelY + 9}
             textAnchor="middle"
             fill="hsl(var(--foreground))"
-            style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10 }}
+            style={{
+              fontFamily: "Inter, system-ui, sans-serif",
+              fontSize: 10,
+              fontWeight: 600,
+            }}
           >
             {label}
           </text>
@@ -113,21 +143,18 @@ export function MemoryGraphLaneCanvas({
     }
 
     return (
-      <g>
-        <rect
-          x={8}
-          y={-10}
-          width={width}
-          height={18}
-          fill="hsl(var(--background))"
-          stroke="hsl(var(--foreground))"
-          strokeWidth={1}
-        />
+      <g opacity={inFocus ? 1 : 0.35}>
+        <title>{node.label}</title>
         <text
-          x={14}
-          y={3}
-          fill="hsl(var(--foreground))"
-          style={{ fontFamily: "JetBrains Mono, monospace", fontSize: 10 }}
+          x={0}
+          y={labelY + 9}
+          textAnchor="middle"
+          fill="hsl(var(--muted-foreground))"
+          style={{
+            fontFamily: "Inter, system-ui, sans-serif",
+            fontSize: 10,
+            fontWeight: 500,
+          }}
         >
           {label}
         </text>
@@ -197,60 +224,61 @@ export function MemoryGraphLaneCanvas({
           strokeWidth={isActive ? 2 : 1}
           opacity={inFocus ? 1 : 0.2}
         />
-        {isActive && renderNodeLabel(node)}
+        {renderNodeLabel(node, pos.labelMaxWidth, inFocus, isActive)}
       </g>
     );
   };
 
   return (
-    <div
-      ref={containerRef}
-      className="relative w-full h-full min-h-0 bg-background overflow-auto"
-      onMouseLeave={() => {
-        setHoverId(null);
-        onFocus(null);
-      }}
-    >
+    <div ref={shellRef} className="absolute inset-0 min-h-0 min-w-0 bg-background">
       <div
-        className="absolute inset-0 opacity-[0.35] pointer-events-none"
-        style={{
-          minHeight: svgHeight,
-          backgroundImage:
-            "linear-gradient(hsl(var(--border) / 0.35) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border) / 0.35) 1px, transparent 1px)",
-          backgroundSize: "24px 24px",
+        className="h-full w-full overflow-y-auto overflow-x-hidden"
+        onMouseLeave={() => {
+          setHoverId(null);
+          onFocus(null);
         }}
-      />
-
-      {mode === "story" ? (
-        <div className="sticky top-0 left-0 right-0 z-10 border-b border-border bg-background/95 backdrop-blur-sm px-3 py-2 text-center">
-          <span className="text-xs font-medium text-muted-foreground">
-            Story · chronological memory path
-          </span>
-        </div>
-      ) : (
-        <div className="sticky top-0 left-0 right-0 z-10 flex border-b border-border bg-background/95 backdrop-blur-sm min-w-full">
-          {lanes.map((lane) => (
-            <div
-              key={lane.id}
-              className="flex-1 px-3 py-2 border-r border-border last:border-r-0 text-center min-w-[120px]"
-            >
-              <span className="text-xs font-medium text-muted-foreground">
-                {lane.label} ({laneCounts[lane.id] ?? 0})
-              </span>
-            </div>
-          ))}
-        </div>
-      )}
-
-      <svg
-        width={svgWidth}
-        height={svgHeight}
-        className="relative block"
-        style={{ minWidth: svgWidth }}
       >
-        <g>{data.links.map(renderLink)}</g>
-        <g>{data.nodes.map(renderNode)}</g>
-      </svg>
+        <div
+          className="sticky top-0 z-10 border-b border-border bg-background/95 backdrop-blur-sm"
+          style={{ width: svgWidth || "100%", height: headerOffset }}
+        >
+          <div className="relative h-full" style={{ width: svgWidth || "100%" }}>
+            {laneLayouts.map((laneLayout) => {
+              const lane = lanes.find((l) => l.id === laneLayout.id);
+              if (!lane) return null;
+              return (
+                <div
+                  key={laneLayout.id}
+                  className="absolute top-0 flex h-full items-center justify-center overflow-hidden border-r border-border px-2 text-center last:border-r-0"
+                  style={{ left: laneLayout.left, width: laneLayout.width }}
+                >
+                  <span className="truncate text-xs font-medium capitalize text-muted-foreground">
+                    {lane.label} ({laneCounts[lane.id] ?? 0})
+                  </span>
+                </div>
+              );
+            })}
+          </div>
+        </div>
+
+        <div className="relative" style={{ width: svgWidth || "100%", height: svgHeight }}>
+          <div
+            className="pointer-events-none absolute inset-0 opacity-[0.35]"
+            style={{
+              backgroundImage:
+                "linear-gradient(hsl(var(--border) / 0.35) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border) / 0.35) 1px, transparent 1px)",
+              backgroundSize: "24px 24px",
+            }}
+          />
+
+          {svgWidth > 0 && (
+            <svg width={svgWidth} height={svgHeight} className="relative block">
+              <g>{data.links.map(renderLink)}</g>
+              <g>{data.nodes.map(renderNode)}</g>
+            </svg>
+          )}
+        </div>
+      </div>
     </div>
   );
 }

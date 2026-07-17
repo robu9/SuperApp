@@ -2,10 +2,7 @@ import React, { useCallback, useEffect, useMemo, useState } from "react";
 import { Brain, Loader2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
 import { api } from "@/lib/api/client";
-import {
-  MemoryGraphCanvas,
-  type MemoryGraphData,
-} from "@/components/sections/memory-graph-canvas";
+import type { MemoryGraphData } from "@/components/sections/memory-graph-canvas";
 import { MemoryGraphLaneCanvas } from "@/components/sections/memory-graph-lane-canvas";
 import { MemoryNodeDetail } from "@/components/sections/memory-node-detail";
 import {
@@ -15,20 +12,7 @@ import {
   graphFromMemories,
   mergeGraphResponse,
 } from "@/lib/memory-graph";
-import {
-  buildFlowLanes,
-  buildTypeLanes,
-  countNodeKinds,
-  type GraphViewMode,
-} from "@/lib/memory-graph-layout";
-import { cn } from "@/lib/utils";
-
-const VIEW_MODES: { id: GraphViewMode; label: string }[] = [
-  { id: "flow", label: "Flow" },
-  { id: "force", label: "Force" },
-  { id: "type", label: "Type" },
-  { id: "story", label: "Story" },
-];
+import { buildTypeLanes, countNodeKinds } from "@/lib/memory-graph-layout";
 
 const NODE_LEGEND = [
   { type: "screen_chunk", label: "screen" },
@@ -40,7 +24,6 @@ const NODE_LEGEND = [
 
 export function BrainSection() {
   const [query, setQuery] = useState("");
-  const [mode, setMode] = useState<GraphViewMode>("flow");
   const [loading, setLoading] = useState(true);
   const [expanding, setExpanding] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -84,9 +67,7 @@ export function BrainSection() {
   }, [query, loadGraph]);
 
   const typeLanes = useMemo(() => buildTypeLanes(graph), [graph]);
-  const flowLanes = useMemo(() => buildFlowLanes(graph), [graph]);
-  const detailId = selectedId ?? hoverId;
-  const detailNode = getNodeById(graph, detailId);
+  const detailNode = selectedId ? getNodeById(graph, selectedId) : null;
 
   const expandSelected = useCallback(async (id: string) => {
     setExpanding(true);
@@ -117,6 +98,15 @@ export function BrainSection() {
             {graph.nodes.length} nodes · {graph.links.length} edges · {countNodeKinds(graph)} kinds
             {expanding && " · Expanding…"}
           </p>
+        </div>
+
+        <div className="hidden md:flex items-center gap-3 ml-4">
+          {NODE_LEGEND.map((item) => (
+            <div key={item.type} className="flex items-center gap-1.5">
+              <span className="w-2 h-2 rounded-full border border-foreground/40 bg-background shrink-0" />
+              <span className="text-xs text-muted-foreground capitalize">{item.label}</span>
+            </div>
+          ))}
         </div>
 
         <div className="relative flex-1 max-w-md ml-auto">
@@ -154,95 +144,24 @@ export function BrainSection() {
             </div>
           )}
 
-          {graph.nodes.length > 0 && mode === "force" && (
-            <MemoryGraphCanvas
-              data={graph}
-              selectedId={selectedId}
-              hoverId={hoverId}
-              onHover={setHoverId}
-              onSelect={handleSelect}
-            />
-          )}
-
-          {graph.nodes.length > 0 && mode === "flow" && (
-            <MemoryGraphLaneCanvas
-              data={graph}
-              lanes={flowLanes}
-              mode="flow"
-              focusId={hoverId ?? selectedId}
-              onFocus={setHoverId}
-              onSelect={(id) => handleSelect(id)}
-            />
-          )}
-
-          {graph.nodes.length > 0 && mode === "type" && (
+          {graph.nodes.length > 0 && (
             <MemoryGraphLaneCanvas
               data={graph}
               lanes={typeLanes}
-              mode="type"
               focusId={hoverId ?? selectedId}
               onFocus={setHoverId}
               onSelect={(id) => handleSelect(id)}
             />
           )}
 
-          {graph.nodes.length > 0 && mode === "story" && (
-            <MemoryGraphLaneCanvas
-              data={graph}
-              lanes={[]}
-              mode="story"
-              focusId={hoverId ?? selectedId}
-              onFocus={setHoverId}
-              onSelect={(id) => handleSelect(id)}
-            />
-          )}
-
-          <div className="absolute bottom-4 left-4 rounded-lg border border-border bg-background/95 backdrop-blur-sm px-3 py-2 max-w-[200px] z-10">
-            <p className="text-xs font-medium text-muted-foreground mb-2">
-              Node type
-            </p>
-            <div className="flex flex-col gap-1.5">
-              {NODE_LEGEND.map((item) => (
-                <div key={item.type} className="flex items-center gap-2">
-                  <span className="w-2.5 h-2.5 rounded-sm border border-foreground/40 bg-background shrink-0" />
-                  <span className="text-xs text-muted-foreground capitalize">
-                    {item.label}
-                  </span>
-                </div>
-              ))}
-            </div>
-          </div>
-
-          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex rounded-lg border border-border bg-background/95 backdrop-blur-sm overflow-hidden">
-            {VIEW_MODES.map((item) => (
-              <button
-                key={item.id}
-                type="button"
-                onClick={() => setMode(item.id)}
-                className={cn(
-                  "px-4 py-2 text-xs font-medium border-r border-border last:border-r-0 transition-colors duration-150",
-                  mode === item.id
-                    ? "bg-accent text-foreground"
-                    : "text-muted-foreground hover:bg-accent/60 hover:text-foreground"
-                )}
-              >
-                {item.label}
-              </button>
-            ))}
-          </div>
         </div>
 
-        {detailNode && (
-          <aside
-            className={cn(
-              "shrink-0 z-20 transition-all duration-150",
-              selectedId ? "w-96 border-l border-border" : "absolute right-4 top-4 w-80 pointer-events-auto"
-            )}
-          >
+        {detailNode && selectedId && (
+          <aside className="shrink-0 z-20 w-96 border-l border-border">
             <MemoryNodeDetail
               node={detailNode}
               graph={graph}
-              pinned={!!selectedId}
+              pinned
               onClose={() => setSelectedId(null)}
               onNavigate={(id) => handleSelect(id)}
             />

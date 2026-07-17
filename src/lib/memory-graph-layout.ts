@@ -1,8 +1,6 @@
 import type { GraphLink, GraphNode, MemoryGraphData } from "@/components/sections/memory-graph-canvas";
 import { linkEndpointId } from "@/lib/memory-graph";
 
-export type GraphViewMode = "flow" | "force" | "type" | "story";
-
 export interface GraphLane {
   id: string;
   label: string;
@@ -10,32 +8,42 @@ export interface GraphLane {
   match?: (node: GraphNode) => boolean;
 }
 
-export const FLOW_LANES: GraphLane[] = [
-  { id: "capture", label: "capture", types: ["screen_chunk", "audio_chunk"] },
-  { id: "memories", label: "memories", types: ["memory", "document"] },
-  { id: "entities", label: "entities", types: ["topic", "app"] },
-  { id: "events", label: "events", types: ["meeting", "task"] },
-];
-
 export interface NodePosition {
   x: number;
   y: number;
+  labelMaxWidth: number;
+}
+
+export interface LaneLayout {
+  id: string;
+  left: number;
+  width: number;
 }
 
 export interface LayoutResult {
   positions: Map<string, NodePosition>;
   contentHeight: number;
   contentWidth: number;
+  laneLayouts: LaneLayout[];
 }
 
-const MIN_CELL_W = 36;
-const MIN_CELL_H = 28;
-const STORY_GAP_X = 148;
-const STORY_ROW_GAP = 80;
+const MIN_CELL_W = 64;
+const MIN_CELL_H = 56;
+const NODE_Y_INSET = 12;
+/** Keep labels from clipping the lane edge. */
+const EDGE_INSET = 4;
+const MIN_LANE_W = 88;
 
 function nodeInLane(node: GraphNode, lane: GraphLane): boolean {
   if (lane.match) return lane.match(node);
   return lane.types.includes(node.type);
+}
+
+/** Spread columns so the first sits on the left edge and the last on the right. */
+function colX(col: number, cols: number, laneLeft: number, laneWidth: number): number {
+  if (cols <= 1) return laneLeft + laneWidth / 2;
+  const inner = Math.max(laneWidth - EDGE_INSET * 2, 1);
+  return laneLeft + EDGE_INSET + (col / (cols - 1)) * inner;
 }
 
 function layoutNodesInGrid(
@@ -50,19 +58,35 @@ function layoutNodesInGrid(
     return { positions, height: availableHeight };
   }
 
-  const maxCols = Math.max(1, Math.floor(laneWidth / MIN_CELL_W));
-  const cols = Math.min(maxCols, Math.max(1, Math.ceil(Math.sqrt(laneNodes.length))));
+  const cols = Math.max(
+    1,
+    Math.min(laneNodes.length, Math.floor(Math.max(laneWidth, MIN_CELL_W) / MIN_CELL_W))
+  );
   const rows = Math.ceil(laneNodes.length / cols);
-  const contentHeight = Math.max(availableHeight, rows * MIN_CELL_H + 24);
-  const cellW = laneWidth / cols;
+  const contentHeight = Math.max(availableHeight, rows * MIN_CELL_H + 16);
   const cellH = contentHeight / rows;
+  const approxCellW = laneWidth / cols;
+  const labelMaxWidth = Math.max(36, approxCellW - 4);
 
   laneNodes.forEach((node, index) => {
     const col = index % cols;
     const row = Math.floor(index / cols);
+    const isLastRow = row === rows - 1;
+    const nodesInRow = isLastRow ? laneNodes.length - row * cols : cols;
+
+    // Partial last row also spans full lane width edge-to-edge.
+    const x =
+      nodesInRow === cols
+        ? colX(col, cols, laneLeft, laneWidth)
+        : colX(col, nodesInRow, laneLeft, laneWidth);
+
     positions.set(node.id, {
-      x: laneLeft + cellW * col + cellW / 2,
-      y: startY + cellH * row + cellH / 2,
+      x,
+      y: startY + cellH * row + NODE_Y_INSET,
+      labelMaxWidth:
+        nodesInRow === cols
+          ? labelMaxWidth
+          : Math.max(36, laneWidth / nodesInRow - 4),
     });
   });
 
@@ -97,38 +121,28 @@ export function buildTypeLanes(graph: MemoryGraphData): GraphLane[] {
   }));
 }
 
-/** When captures dominate, split flow into app columns instead of one vertical stack. */
-export function buildFlowLanes(graph: MemoryGraphData): GraphLane[] {
-  const captureTypes = new Set(["screen_chunk", "audio_chunk"]);
-  const captureCount = graph.nodes.filter((n) => captureTypes.has(n.type)).length;
-  const captureHeavy = graph.nodes.length > 0 && captureCount / graph.nodes.length >= 0.6;
+function allocateLaneWidths(counts: number[], usableWidth: number): number[] {
+  const n = counts.length;
+  if (n === 0) return [];
+  if (n === 1) return [usableWidth];
 
-  if (!captureHeavy || graph.nodes.length < 6) {
-    const active = FLOW_LANES.filter((lane) => graph.nodes.some((n) => nodeInLane(n, lane)));
-    return active.length > 0 ? active : FLOW_LANES;
+  const total = counts.reduce((sum, c) => sum + Math.max(c, 1), 0);
+  const widths = counts.map((c) => (Math.max(c, 1) / total) * usableWidth);
+
+  // Clamp small lanes to a minimum, pull from the largest lane.
+  for (let i = 0; i < widths.length; i++) {
+    if (widths[i] >= MIN_LANE_W) continue;
+    const deficit = MIN_LANE_W - widths[i];
+    const largest = widths.indexOf(Math.max(...widths));
+    if (largest === i || widths[largest] - deficit < MIN_LANE_W) continue;
+    widths[i] = MIN_LANE_W;
+    widths[largest] -= deficit;
   }
 
-  const appGroups = new Map<string, GraphNode[]>();
-  for (const node of graph.nodes) {
-    const app = (node.memory.app_name || "unknown").toLowerCase().slice(0, 24);
-    const group = appGroups.get(app) ?? [];
-    group.push(node);
-    appGroups.set(app, group);
-  }
-
-  const topApps = [...appGroups.entries()]
-    .sort((a, b) => b[1].length - a[1].length)
-    .slice(0, 6);
-
-  return topApps.map(([app, nodes]) => {
-    const ids = new Set(nodes.map((n) => n.id));
-    return {
-      id: `app:${app}`,
-      label: app,
-      types: [],
-      match: (node: GraphNode) => ids.has(node.id),
-    };
-  });
+  // Flush any float error into the last (usually largest) lane.
+  const sum = widths.reduce((s, w) => s + w, 0);
+  widths[widths.length - 1] += usableWidth - sum;
+  return widths;
 }
 
 export function layoutLaneNodes(
@@ -136,17 +150,23 @@ export function layoutLaneNodes(
   lanes: GraphLane[],
   width: number,
   height: number,
-  padding = 48,
-  topOffset = 40
+  _padding = 0,
+  topOffset = 0
 ): LayoutResult {
   const positions = new Map<string, NodePosition>();
-  const usableWidth = Math.max(width - padding * 2, 200);
-  const laneCount = Math.max(lanes.length, 1);
-  const laneWidth = usableWidth / laneCount;
-  const startY = padding + topOffset;
-  const availableHeight = Math.max(height - startY - padding, 200);
+  const laneLayouts: LaneLayout[] = [];
+  // Use the full measured width — no side padding.
+  const usableWidth = Math.max(width, 200);
+  const startY = topOffset + 8;
+  const availableHeight = Math.max(height - startY - 8, 200);
+
+  const counts = lanes.map(
+    (lane) => nodes.filter((node) => nodeInLane(node, lane)).length
+  );
+  const widths = allocateLaneWidths(counts, usableWidth);
 
   let maxContentHeight = availableHeight;
+  let laneLeft = 0;
 
   for (let laneIndex = 0; laneIndex < lanes.length; laneIndex++) {
     const lane = lanes[laneIndex];
@@ -156,7 +176,9 @@ export function layoutLaneNodes(
         (a, b) =>
           new Date(a.memory.created_at).getTime() - new Date(b.memory.created_at).getTime()
       );
-    const laneLeft = padding + laneWidth * laneIndex;
+    const laneWidth = widths[laneIndex] ?? usableWidth;
+
+    laneLayouts.push({ id: lane.id, left: laneLeft, width: laneWidth });
 
     const { positions: lanePositions, height: laneHeight } = layoutNodesInGrid(
       laneNodes,
@@ -170,75 +192,17 @@ export function layoutLaneNodes(
       positions.set(id, pos);
     }
     maxContentHeight = Math.max(maxContentHeight, laneHeight);
+    laneLeft += laneWidth;
   }
 
   return {
     positions,
-    contentHeight: maxContentHeight + padding,
-    contentWidth: width,
+    contentHeight: maxContentHeight,
+    contentWidth: usableWidth,
+    laneLayouts,
   };
-}
-
-export function layoutStoryNodes(
-  nodes: GraphNode[],
-  width: number,
-  height: number,
-  padding = 48,
-  topOffset = 40
-): LayoutResult {
-  const positions = new Map<string, NodePosition>();
-  const sorted = [...nodes].sort(
-    (a, b) =>
-      new Date(a.memory.created_at).getTime() - new Date(b.memory.created_at).getTime()
-  );
-
-  if (sorted.length === 0) {
-    return { positions, contentHeight: height, contentWidth: width };
-  }
-
-  const usableWidth = Math.max(width - padding * 2, 200);
-  const nodesPerRow = Math.max(1, Math.floor(usableWidth / STORY_GAP_X));
-  const rows = Math.ceil(sorted.length / nodesPerRow);
-  const contentWidth = Math.max(
-    width,
-    padding * 2 + (nodesPerRow - 1) * STORY_GAP_X + 40,
-    padding * 2 + (sorted.length - 1) * STORY_GAP_X + 40
-  );
-  const contentHeight = Math.max(
-    height,
-    topOffset + padding * 2 + rows * STORY_ROW_GAP + 60
-  );
-  const startY = topOffset + padding + 48;
-
-  sorted.forEach((node, index) => {
-    const row = Math.floor(index / nodesPerRow);
-    const col = index % nodesPerRow;
-    const rowReversed = row % 2 === 1;
-    const colInRow = rowReversed ? nodesPerRow - 1 - col : col;
-    const nodesInThisRow = Math.min(nodesPerRow, sorted.length - row * nodesPerRow);
-    const rowWidth = (nodesInThisRow - 1) * STORY_GAP_X;
-    const rowStartX = padding + 24 + (usableWidth - rowWidth) / 2;
-
-    positions.set(node.id, {
-      x: rowStartX + colInRow * STORY_GAP_X,
-      y: startY + row * STORY_ROW_GAP,
-    });
-  });
-
-  return { positions, contentHeight, contentWidth };
 }
 
 export function countNodeKinds(graph: MemoryGraphData): number {
   return new Set(graph.nodes.map((n) => n.type)).size;
-}
-
-export function laneCounts(
-  graph: MemoryGraphData,
-  lanes: GraphLane[]
-): Record<string, number> {
-  const counts: Record<string, number> = {};
-  for (const lane of lanes) {
-    counts[lane.id] = graph.nodes.filter((n) => nodeInLane(n, lane)).length;
-  }
-  return counts;
 }
