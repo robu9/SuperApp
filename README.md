@@ -1,179 +1,305 @@
 # SuperApp
 
-AI-powered desktop app that captures your screen and audio locally, then connects that context to chat, timeline, pipes, and meetings.
+[![Release validation](https://github.com/robu9/SuperApp/actions/workflows/release.yml/badge.svg)](https://github.com/robu9/SuperApp/actions/workflows/release.yml)
+[![Latest release](https://img.shields.io/github/v/release/robu9/SuperApp?display_name=tag)](https://github.com/robu9/SuperApp/releases/latest)
+[![Platforms](https://img.shields.io/badge/platform-macOS%20%7C%20Linux-black)](#supported-platforms)
+[![License pending](https://img.shields.io/badge/license-pending-yellow)](#license)
 
-## Stack
+SuperApp is a local-first AI desktop workspace that turns screen activity and
+meetings into searchable context. It captures frames and audio on your device,
+extracts text, builds a local memory graph, and lets you search, chat with, and
+automate against that history.
 
-- **Electron 34** — multi-window desktop shell
-- **Vite + React 18 + TypeScript** — renderer
-- **Tailwind CSS + Radix UI** — B&W geometric minimalism design system
-- **Zustand** — client state (chat, settings, onboarding, recording)
+The desktop application, capture backend, local database, managed Supermemory
+runtime, landing site, and release workflow all live in this repository.
 
-## Design
+> [!IMPORTANT]
+> This repository is publicly readable, but it does not have a software license
+> yet. Until one is added, normal copyright restrictions apply. See
+> [License](#license) before reusing or redistributing the code.
 
-- Pure grayscale palette, `--radius: 0` (sharp corners)
-- JetBrains Mono typography, 150ms transitions, hover color inversion
-- Light/dark/system theme with FOUC prevention
-- Resizable collapsible sidebar with portal pattern
+## What SuperApp does
 
-AIDesigner reference run: `.aidesigner/runs/2026-07-14T16-19-27-683Z-desktop-productivity-app-black-white/`
+- **Captures screen context locally** — deduplicated frames, active app/window
+  metadata, OCR text, and fragmented MP4 storage.
+- **Records meeting notes** — microphone and supported system audio are chunked,
+  transcribed, stored, and turned into summaries and action items.
+- **Searches your history** — SQLite FTS5 powers search across captured screen
+  text and transcripts; `Cmd+K` opens the global search window.
+- **Chats with your context** — typed and live-voice conversations can retrieve
+  relevant local memories before calling Gemini.
+- **Builds a memory graph** — Supermemory Local connects captured moments,
+  meeting summaries, and generated memories into a navigable graph.
+- **Runs workflows** — built-in daily summary, meeting recap, focus tracker, and
+  action-item workflows operate on captured context.
+- **Connects external apps optionally** — Gmail, Google Calendar, Slack, and
+  Notion are available through Composio-managed OAuth.
 
-## Windows
+## Current status
 
-| Route | Purpose |
-|-------|---------|
-| `/home` | Main dashboard — chat, timeline, pipes, meetings, brain, connections, help |
-| `/settings` | Grouped settings with 13 sections |
-| `/onboarding` | First-run wizard (login → permissions → engine → apps → pipe) |
-| `/search` | Floating global search (`⌘K`) |
-| `/chat` | Standalone chat window (`⌘N`) |
+| Area | Status | Notes |
+| --- | --- | --- |
+| Screen capture | Available | Approximately every two seconds with frame deduplication |
+| OCR | Available | Apple Vision on macOS; Tesseract.js fallback elsewhere |
+| Timeline and search | Available | Local SQLite/FTS5 data and on-demand frame extraction |
+| Meeting capture | Available | Microphone plus macOS/Linux system-audio paths |
+| AI chat and summaries | Available with API key | Uses Gemini and may send retrieved context to Google |
+| Live voice | Preview | Uses the configured Gemini Live model |
+| Memory graph | Available | Requires the managed or standalone Supermemory Local service |
+| Workflows | Available | Four built-in workflows; no third-party pipe marketplace yet |
+| App connections | Optional | Requires Composio and the relevant external accounts |
+| Packaged downloads | Available | Unsigned universal macOS DMG and Linux x64 AppImage |
 
-## Getting started
+SuperApp is not yet at full Screenpipe parity. Native accessibility-tree
+extraction, speaker diarization, semantic search across the capture database,
+an MCP server, and a general-purpose third-party pipe runtime remain roadmap
+items.
+
+## Local-first and privacy model
+
+“Local-first” describes where capture and storage happen; it does not mean every
+optional AI request is processed offline.
+
+| Data or operation | Where it happens |
+| --- | --- |
+| Screenshots, video chunks, audio chunks, OCR, SQLite, and FTS search | On your device under `~/.superapp/` |
+| Memory service and graph | Local Supermemory service on `127.0.0.1:6767` |
+| Capture API | Local backend on `127.0.0.1:3030` |
+| Chat, transcription, summaries, workflows, and live voice | Selected context is sent to the configured Gemini API |
+| Gmail, Calendar, Slack, and Notion actions | Sent through Composio and the selected external service when explicitly connected/used |
+| Landing-page analytics | Vercel Analytics records site/download events, not desktop capture content |
+
+Review provider terms and avoid recording sensitive material you are not
+authorized to capture. Recording controls can pause the full capture engine or
+individual audio devices at any time.
+
+## Supported platforms
+
+- **macOS:** universal DMG for Apple Silicon and Intel. Screen Recording,
+  Microphone, and Accessibility permissions are requested during onboarding.
+  Releases are currently unsigned, so Gatekeeper may require **Open Anyway**.
+- **Linux:** x64 AppImage. Audio capture depends on the host's available audio
+  devices and tooling.
+- **Windows:** some backend capture code has Windows paths, but Windows is not a
+  supported packaged release target yet.
+
+## Getting started from source
+
+### Requirements
+
+- Node.js 24
+- npm 11 (the repository pins `npm@11.18.0`)
+- A Gemini API key for transcription, chat, summaries, workflows, and live voice
+- macOS or Linux for the supported desktop experience
+
+### Install and run
 
 ```bash
+git clone https://github.com/robu9/SuperApp.git
+cd SuperApp
+cp .env.example .env
 npm install
-npm approve-scripts electron esbuild   # first time only
 npm run dev
 ```
 
-Production build:
+Add your Gemini key to `.env` before testing AI features:
+
+```dotenv
+GEMINI_API_KEY=your_gemini_api_key_here
+GEMINI_MODEL=gemini-2.5-flash
+```
+
+`npm install` also installs the backend dependencies. `npm run dev` starts
+Supermemory Local on port `6767`, the capture backend on port `3030`, Vite, and
+Electron. The first Supermemory startup may take longer while its local runtime
+is prepared.
+
+### Optional connectors
+
+To expose Gmail, Google Calendar, Slack, and Notion in **Connections**, create a
+[Composio](https://composio.dev) API key and add it to `.env`:
+
+```dotenv
+COMPOSIO_API_KEY=comp_...
+```
+
+Composio-managed auth is created when you connect an app. Advanced users can
+override it with `COMPOSIO_AUTH_CONFIG_GMAIL`,
+`COMPOSIO_AUTH_CONFIG_GOOGLECALENDAR`, `COMPOSIO_AUTH_CONFIG_SLACK`, or
+`COMPOSIO_AUTH_CONFIG_NOTION`.
+
+Leaving `COMPOSIO_API_KEY` unset disables connectors without affecting local
+capture, search, or memory.
+
+## Configuration
+
+Common environment variables:
+
+| Variable | Default | Purpose |
+| --- | --- | --- |
+| `GEMINI_API_KEY` | — | Enables Gemini-backed AI features |
+| `GEMINI_MODEL` | `gemini-2.5-flash` | Text/transcription model |
+| `GEMINI_LIVE_MODEL` | `models/gemini-3.1-flash-live-preview` | Live voice model |
+| `GEMINI_LIVE_VOICE` | `Aoede` | Live voice preset |
+| `COMPOSIO_API_KEY` | — | Enables optional app connections |
+| `SUPERAPP_DATA_DIR` | `~/.superapp` | Capture database and media location |
+| `SUPERAPP_PORT` | `3030` | Local capture API port |
+| `SUPERAPP_CAPTURE_INTERVAL` | `2000` | Capture interval in milliseconds |
+| `SUPERAPP_VIDEO_MAX_WIDTH` | `1920` | Maximum stored video width |
+| `SUPERAPP_OCR_ENGINE` | `native` | `native`, `tesseract`, or `off` |
+| `SUPERAPP_AUTO_START` | enabled | Set to `0` to prevent automatic capture |
+| `SUPERAPP_AUDIO` | enabled | Set to `0` to disable audio capture |
+
+See [.env.example](.env.example) and [backend/src/config.ts](backend/src/config.ts)
+for the source of truth.
+
+## Architecture
+
+```text
+Electron main process
+├── manages desktop windows and OS permissions
+├── starts/stops the managed Supermemory Local runtime (:6767)
+└── starts/stops the capture backend utility process (:3030)
+    ├── screen, window, OCR, video, and audio capture
+    ├── SQLite + FTS5 storage
+    ├── meeting transcripts and summaries
+    ├── memory ingestion and retrieval
+    ├── workflow scheduler/runners
+    └── Gemini and optional Composio integrations
+
+React renderer (Vite + TypeScript)
+├── Chat, Timeline, Workflows, Meetings, Brain, and Connections
+├── Zustand stores for local UI state
+└── REST client for the loopback capture API
+```
+
+Key directories:
+
+```text
+electron/   Electron main process, preload bridge, and managed runtimes
+backend/    Hono capture API, SQLite storage, AI, memory, and connectors
+src/        React renderer, pages, components, stores, and API client
+site/       Public landing page
+scripts/    Development and packaging helpers
+build/      Icons, entitlements, and runtime manifest
+```
+
+### Production runtime
+
+Packaged builds are self-contained and do not require a system Node.js install.
+On launch, Electron:
+
+1. Installs the pinned Supermemory Local runtime when needed.
+2. Starts it and waits for port `6767` to become healthy.
+3. Starts the capture backend and waits for port `3030`.
+4. Opens setup, onboarding, or the main application.
+
+Both managed services stop with SuperApp. The runtime manager refuses to kill a
+process it did not start when a configured port is already occupied. Runtime
+credentials and redacted diagnostics live in Electron's OS user-data directory;
+captured content remains under `~/.superapp/` unless configured otherwise.
+
+## Useful commands
+
+| Command | Purpose |
+| --- | --- |
+| `npm run dev` | Start Supermemory, backend, Vite, and Electron for development |
+| `npm run typecheck` | Type-check the renderer and Electron TypeScript |
+| `npm run backend:dev` | Run only the capture backend in watch mode |
+| `npm run backend:build` | Compile the backend |
+| `npm run test:runtime` | Run managed-runtime policy tests |
+| `npm run build:site` | Type-check and build the landing site |
+| `npm run build:mac` | Build an unsigned universal macOS DMG |
+| `npm run build:linux` | Build a Linux x64 AppImage |
+| `npm run build` | Compile and package the desktop application |
+
+The macOS build stages both Sharp/libvips and FFmpeg architectures before
+electron-builder creates the universal application.
+
+## Local API
+
+The capture engine exposes a Screenpipe-compatible REST API at
+`http://127.0.0.1:3030`.
 
 ```bash
-npm run build
+curl http://127.0.0.1:3030/health
+curl "http://127.0.0.1:3030/search?q=meeting&limit=10"
+curl "http://127.0.0.1:3030/frames?limit=20"
+curl http://127.0.0.1:3030/meetings
+curl http://127.0.0.1:3030/memory/stats
+curl http://127.0.0.1:3030/pipes
 ```
 
-Platform builds and website:
+Other endpoint groups include `/engine/*`, `/audio/*`, `/vision/*`, `/chat`,
+`/memory/*`, `/meetings/*`, `/pipes/*`, and `/connectors/*`. The API binds to
+loopback by default and is intended for the local desktop application.
+
+## Building and releasing
 
 ```bash
-npm run build:mac       # universal Intel + Apple Silicon DMG
-npm run build:linux     # x64 AppImage
-npm run build:site      # static Vercel landing page
-npm run test:runtime
+npm run build:mac
+npm run verify:package:mac
+npm run build:linux
+npm run build:site
 ```
 
-The macOS command stages both architecture variants of Sharp, libvips, and
-FFmpeg in the dependency tree before electron-builder merges the app.
-This is required even when the build runs on Apple Silicon.
+Pushing a `v*` tag triggers [.github/workflows/release.yml](.github/workflows/release.yml).
+The workflow validates the renderer, backend, runtime tests, and website; builds
+the universal DMG and x64 AppImage; creates SHA-256 checksums; and publishes a
+GitHub Release. Release artifacts are currently unsigned.
 
-## Production runtime
-
-The public desktop build is self-contained and does not require a system Node.js
-installation. Electron starts the local services in this order:
-
-1. Install the pinned Supermemory Local runtime on first launch.
-2. Start Supermemory and wait for port `6767` to become healthy.
-3. Start the capture backend in an Electron utility process and wait for port
-   `3030`.
-4. Open onboarding or the main window.
-
-Both managed services stop when SuperApp quits. Runtime binaries, credentials,
-and diagnostics live inside SuperApp's OS user-data directory; captured content
-continues to use `~/.superapp/`.
-
-The first-launch setup window exposes installation progress, retry, and the local
-runtime log. SuperApp never kills a process it did not start when a configured
-port is already occupied.
-
-### Publishing
-
-Pushing a `v*` tag runs `.github/workflows/release.yml`, which validates the app
-and site, builds an unsigned universal DMG and x64 AppImage, creates SHA-256
-checksums, and publishes them to GitHub Releases. This makes both landing-page
-downloads work without requiring release secrets. macOS users must use Open
-Anyway until Apple Developer signing and notarization are enabled for a future
-production release.
-
-Unsigned local macOS packaging can also be tested with
-`CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:mac`.
-
-The Vercel project uses the root `vercel.json`, builds `site/`, and links its
-download buttons to the stable latest-release artifact names.
-
-## Backend (capture engine)
-
-SuperApp ships with a local capture engine in `backend/` that exposes a **Screenpipe-compatible REST API** on `http://127.0.0.1:3030`.
-
-### What works today
-
-- Event-driven-lite screen capture (deduped frames every ~2s)
-- Active window + app metadata (Windows/macOS)
-- Real on-screen text via Apple Vision OCR on macOS (Swift helper compiled on first run), Tesseract.js elsewhere/fallback; runs async off the capture path (`SUPERAPP_OCR_ENGINE=native|tesseract|off`)
-- Multilingual meeting transcription through Gemini, including mixed-language speech
-- Meetings: microphone plus macOS or Linux system audio become transcripts, persisted notes, and Gemini summaries/action items
-- Frames stored as fragmented MP4 chunks (`~/.superapp/video/`, readable while recording; `SUPERAPP_VIDEO_MAX_WIDTH` caps stored resolution) with on-demand frame extraction; legacy JPEG frames still served
-- SQLite storage + FTS5 full-text search
-- REST API: `/health`, `/search`, `/frames`, `/vision/list`, `/audio/list`, `/engine/*`
-- Electron auto-starts the engine on launch
-
-### Data directory
-
-Captured data is stored in `~/.superapp/` (frames, SQLite DB, audio).
-
-### Run backend standalone
+For a local unsigned macOS build:
 
 ```bash
-npm run backend:install
-npm run backend:dev
+CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:mac
 ```
 
-### API examples
+## Troubleshooting
 
-```bash
-curl http://localhost:3030/health
-curl "http://localhost:3030/search?q=meeting&limit=10"
-curl http://localhost:3030/frames?limit=20
-```
+- **Ports `3030` or `6767` are occupied:** stop the conflicting local process,
+  then restart SuperApp. The managed runtime intentionally does not terminate
+  unknown processes.
+- **Timeline is empty:** grant Screen Recording permission, verify recording is
+  not paused, and check `http://127.0.0.1:3030/health`.
+- **Meeting transcript is empty:** grant Microphone permission, select active
+  audio devices, speak long enough for a roughly 30-second chunk, and verify the
+  Gemini key.
+- **Chat or summaries fail:** confirm `GEMINI_API_KEY` is set and restart the
+  development services.
+- **macOS permission was just enabled:** fully restart SuperApp so macOS applies
+  the change.
+- **Unsigned macOS release will not open:** use System Settings → Privacy &
+  Security → **Open Anyway** only if you trust the downloaded artifact.
 
-### Still to build (Screenpipe parity)
+Packaged setup errors expose a **View logs** action. Development services also
+write diagnostics to the terminal that launched `npm run dev`.
 
-- True event-driven capture (app switches, clicks, scroll)
-- Native accessibility tree extraction (UI Automation / AX API)
-- Speaker diarization
-- Pipes automation runtime, MCP server, semantic/embedding search
-- Integrations (Slack, Notion, Obsidian, etc.)
+## Contributing
 
-## Connectors (Composio)
+Issues and focused pull requests are welcome for discussion while the project
+license is being selected. Before submitting a change:
 
-The **Connections** panel wires real third-party apps — **Gmail, Google Calendar,
-Slack, Notion** — through [Composio](https://composio.dev) for managed OAuth. Once
-connected, the chat AI can use them as tools (e.g. "summarize my unread gmail",
-"add a 3pm calendar event", "post this to slack").
+1. Create a branch from the latest default branch.
+2. Keep changes scoped and document any new environment variables or endpoints.
+3. Run `npm run typecheck`, `npm run backend:build`, `npm run test:runtime`, and
+   `npm run build:site`.
+4. Explain user-visible behavior, platform impact, and privacy implications in
+   the pull request.
 
-### Setup
+Areas that especially benefit from contribution include accessibility-tree
+capture, cross-platform audio reliability, speaker diarization, capture-engine
+tests, semantic search, MCP support, and contributor documentation.
 
-**Only an API key is required.** Connectors use Composio-managed auth (Composio's
-shared OAuth apps), so the per-app auth config is created automatically the first
-time you connect — no dashboard configuration.
+## License
 
-1. Create an account at [app.composio.dev](https://app.composio.dev) and grab an API key.
-2. Add it to the project root `.env`:
+No license has been selected yet. Public source visibility alone does not grant
+permission to copy, modify, or redistribute the project. A root `LICENSE` file
+and corresponding contributor guidance should be added before presenting the
+repository as fully open source.
 
-   ```bash
-   COMPOSIO_API_KEY=comp_...
-   ```
+## Acknowledgements
 
-3. Restart the app. Open **Connections**, click **connect** on an app, authorize in
-   the browser, and it flips to **connected**. Composio hosts the OAuth callback, so
-   no extra local setup is needed. Leaving `COMPOSIO_API_KEY` unset simply hides the
-   connectors and leaves chat unchanged.
-
-> Advanced: to bring your own OAuth credentials, create an auth config per app in the
-> Composio dashboard and set `COMPOSIO_AUTH_CONFIG_GMAIL` / `_GOOGLECALENDAR` /
-> `_SLACK` / `_NOTION` in `.env` to override the managed auth.
-
-## Mock backend (legacy)
-
-Core UI interactions previously used local mock state. Search, timeline, recording status, and chat context now use the real backend when the engine is running.
-
-## Project layout
-
-```
-electron/          Main process + preload + backend manager
-backend/           Capture engine + Screenpipe-compatible API
-src/
-  components/      UI primitives, sidebar, chat, sections
-  pages/           Route pages
-  lib/stores/      Zustand stores
-  lib/api/         Backend API client
-  lib/hooks/       Theme, shortcuts
-```
+- [Supermemory](https://supermemory.ai) for the local memory runtime and client.
+- [Screenpipe](https://github.com/mediar-ai/screenpipe) for the local capture API
+  conventions that SuperApp is working toward.
+- Electron, React, Hono, SQLite, Gemini, and Composio for the application stack.
