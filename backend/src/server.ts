@@ -2,9 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import type { Server as HttpServer } from "http";
-import { WebSocketServer } from "ws";
-import { API_HOST, API_PORT, AUDIO_ENABLED, AUTO_START_CAPTURE, DATA_DIR, GEMINI_MODEL, OCR_ENABLED, STT_ENGINE } from "./config.js";
+import { API_HOST, API_PORT, AUDIO_ENABLED, AUTO_START_CAPTURE, DATA_DIR, GEMINI_MODEL, OCR_ENABLED } from "./config.js";
 import { captureEngine } from "./capture/engine.js";
 import {
   isAudioRecording,
@@ -15,7 +13,6 @@ import {
 import { listMonitors } from "./capture/screen.js";
 import { extractFrameJpeg, getRecentFrame } from "./capture/video.js";
 import { sttStatus } from "./capture/stt.js";
-import { ensureWhisperSetup } from "./capture/whisper.js";
 import {
   getActivitySummary,
   getFrameById,
@@ -86,7 +83,7 @@ app.get("/config", (c) => {
     model: GEMINI_MODEL,
     ocr_enabled: OCR_ENABLED,
     audio_enabled: AUDIO_ENABLED,
-    stt_engine: STT_ENGINE,
+    stt_engine: sttStatus(),
     data_dir: DATA_DIR,
   });
 });
@@ -734,9 +731,6 @@ export function startServer(): void {
   closeOrphanOpenMeetings();
   deleteStaleEmptyMeetings();
   backfillOrphanTranscriptions();
-  if (STT_ENGINE !== "gemini") {
-    void ensureWhisperSetup();
-  }
   startPipeScheduler();
 
   if (AUTO_START_CAPTURE) {

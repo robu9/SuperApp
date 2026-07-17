@@ -98,7 +98,7 @@ SuperApp ships with a local capture engine in `backend/` that exposes a **Screen
 - Event-driven-lite screen capture (deduped frames every ~2s)
 - Active window + app metadata (Windows/macOS)
 - Real on-screen text via Apple Vision OCR on macOS (Swift helper compiled on first run), Tesseract.js elsewhere/fallback; runs async off the capture path (`SUPERAPP_OCR_ENGINE=native|tesseract|off`)
-- Local speech-to-text via whisper.cpp (Metal-accelerated, built on first run into `~/.superapp/whisper/`; `SUPERAPP_STT_ENGINE=auto|whisper|gemini`, Gemini cloud fallback while building)
+- Multilingual meeting transcription through Gemini, including mixed-language speech
 - Meetings: audio sessions become meetings with transcripts, persisted notes, and Gemini summaries/action items
 - Frames stored as fragmented MP4 chunks (`~/.superapp/video/`, readable while recording; `SUPERAPP_VIDEO_MAX_WIDTH` caps stored resolution) with on-demand frame extraction; legacy JPEG frames still served
 - SQLite storage + FTS5 full-text search

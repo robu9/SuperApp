@@ -330,7 +330,14 @@ export async function transcribeAudio(filePath: string): Promise<string> {
           {
             parts: [
               {
-                text: "Transcribe this audio verbatim. If there is no speech, return an empty string. Return only the transcription, no commentary.",
+                text: [
+                  "Transcribe this meeting audio verbatim in the language or languages being spoken.",
+                  "Preserve code-switching, including mixed-language speech such as Hinglish, and do not translate it.",
+                  "Use the natural script used by the speaker when it is clear, and preserve names, numbers, and technical terms as accurately as possible.",
+                  "Add punctuation for readability without summarizing or rewriting what was said.",
+                  "If there is no intelligible speech, return an empty string.",
+                  "Return only the transcription with no commentary or labels.",
+                ].join(" "),
               },
               {
                 inline_data: {
