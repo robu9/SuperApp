@@ -12,6 +12,7 @@ const electronAPI = {
   getPlatform: () => ipcRenderer.invoke("app:get-platform") as Promise<NodeJS.Platform>,
   getVersion: () => ipcRenderer.invoke("app:get-version") as Promise<string>,
   quit: () => ipcRenderer.invoke("app:quit"),
+  restart: () => ipcRenderer.invoke("app:restart"),
   getLoginItemSettings: () =>
     ipcRenderer.invoke("app:get-login-item-settings") as Promise<{
       openAtLogin: boolean;

@@ -2,7 +2,7 @@ import { readFileSync, existsSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { API_HOST, API_PORT, AUDIO_ENABLED, DATA_DIR, GEMINI_MODEL, OCR_ENABLED, STT_ENGINE } from "./config.js";
+import { API_HOST, API_PORT, AUDIO_ENABLED, AUTO_START_CAPTURE, DATA_DIR, GEMINI_MODEL, OCR_ENABLED, STT_ENGINE } from "./config.js";
 import { captureEngine } from "./capture/engine.js";
 import {
   isAudioRecording,
@@ -455,12 +455,18 @@ app.post("/meetings/:id/summarize", async (c) => {
   }
 });
 
-app.post("/engine/start", (c) => {
+app.post("/engine/start", async (c) => {
   captureEngine.start();
+  if (AUDIO_ENABLED) {
+    await startAudioRecording();
+    captureEngine.state.audioRecording = true;
+  }
   return c.json({ status: "ok", running: true });
 });
 
 app.post("/engine/stop", (c) => {
+  stopAudioRecording();
+  captureEngine.state.audioRecording = false;
   captureEngine.stop();
   return c.json({ status: "ok", running: false });
 });
@@ -782,13 +788,15 @@ export function startServer(): void {
   if (STT_ENGINE !== "gemini") {
     void ensureWhisperSetup();
   }
-  captureEngine.start();
   startPipeScheduler();
 
-  if (AUDIO_ENABLED) {
-    void startAudioRecording().then(() => {
-      captureEngine.state.audioRecording = true;
-    });
+  if (AUTO_START_CAPTURE) {
+    captureEngine.start();
+    if (AUDIO_ENABLED) {
+      void startAudioRecording().then(() => {
+        captureEngine.state.audioRecording = true;
+      });
+    }
   }
 
   serve({ fetch: app.fetch, hostname: API_HOST, port: API_PORT }, () => {

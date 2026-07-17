@@ -314,6 +314,7 @@ export class RuntimeManager {
             SUPERMEMORY_LOCAL_URL: MEMORY_URL,
             SUPERMEMORY_API_KEY: readManagedApiKey(paths.memory),
             SUPERAPP_NATIVE_DIR: path.join(process.resourcesPath, "backend-native"),
+            SUPERAPP_AUTO_START: "0",
             ...providerEnv,
           },
           (message) => this.writeLog(`backend: ${message}`),

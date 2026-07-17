@@ -43,6 +43,7 @@ export const OCR_ENGINE = (process.env.SUPERAPP_OCR_ENGINE ?? "native") as
   | "tesseract"
   | "off";
 export const AUDIO_ENABLED = process.env.SUPERAPP_AUDIO !== "0";
+export const AUTO_START_CAPTURE = process.env.SUPERAPP_AUTO_START !== "0";
 
 /** Audio chunk length in seconds before transcription */
 export const AUDIO_CHUNK_SEC = Number(
