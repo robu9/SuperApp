@@ -3,8 +3,11 @@ import { getSupermemoryClient } from "./client.js";
 
 function titleFromContent(content: string, max = 60): string {
   const line = content.split("\n").find((part) => part.trim().length > 0) ?? content;
-  return line.trim().slice(0, max).toLowerCase();
+  return line.trim().slice(0, max);
 }
+
+const ENTITY_CONTEXT =
+  "Personal desktop capture for this user. Extract durable facts about who they are, where they live/work, goals and projects, tools they use (Gmail, Calendar, Slack, etc.), people they interact with, and preferences. Prefer user-context memories over capture modality.";
 
 async function addDocument(params: {
   content: string;
@@ -18,6 +21,7 @@ async function addDocument(params: {
       content: params.content,
       containerTag: SUPERMEMORY_CONTAINER_TAG,
       customId: params.customId,
+      entityContext: ENTITY_CONTEXT,
       metadata: {
         title: params.title ?? titleFromContent(params.content),
         ...params.metadata,
@@ -41,18 +45,17 @@ export async function ingestScreenCapture(params: {
   if (!text) return null;
 
   const title = params.windowName ?? params.appName ?? titleFromContent(text);
-  const header = [
-    "[screen]",
-    params.appName ? `[${params.appName}]` : null,
-    params.windowName ? `"${params.windowName}"` : null,
+  const contextLine = [
+    params.appName ? `App: ${params.appName}` : null,
+    params.windowName ? `Window: ${params.windowName}` : null,
   ]
     .filter(Boolean)
-    .join(" ");
+    .join(" · ");
 
   return addDocument({
     customId: `frame_${params.frameId}`,
     title,
-    content: `${header}\n${text}`,
+    content: contextLine ? `${contextLine}\n\n${text}` : text,
     metadata: {
       superapp_type: "screen_chunk",
       source_type: "frame",
@@ -77,7 +80,7 @@ export async function ingestAudioChunk(params: {
   return addDocument({
     customId: `audio_${params.audioId}`,
     title: titleFromContent(text),
-    content: `[audio]\n${text}`,
+    content: text,
     metadata: {
       superapp_type: "audio_chunk",
       source_type: "audio",
@@ -96,7 +99,7 @@ export async function ingestMeetingSummary(params: {
   actionItems: string[];
 }): Promise<string | null> {
   const content = [
-    `[meeting] ${params.title}`,
+    params.title,
     params.summary,
     params.actionItems.length > 0
       ? `action items:\n${params.actionItems.map((item) => `- ${item}`).join("\n")}`
@@ -107,7 +110,7 @@ export async function ingestMeetingSummary(params: {
 
   return addDocument({
     customId: `meeting_${params.meetingId}`,
-    title: params.title.toLowerCase(),
+    title: params.title,
     content,
     metadata: {
       superapp_type: "meeting",
@@ -124,8 +127,8 @@ export async function ingestUserMemory(params: {
 }): Promise<string | null> {
   return addDocument({
     customId: `user_${Date.now()}`,
-    title: params.title.toLowerCase(),
-    content: `[memory] ${params.title}\n${params.content}`,
+    title: params.title,
+    content: `${params.title}\n${params.content}`,
     metadata: {
       superapp_type: "memory",
       source_type: "user",

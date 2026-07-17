@@ -57,6 +57,7 @@ import {
   getMemoryStats,
   getNode,
   getNodeGraph,
+  getUserProfile,
   ingestMeetingSummary,
   ingestUserMemory,
   initSupermemory,
@@ -564,9 +565,20 @@ app.post("/chat/live/session", async (c) => {
     const searchQuery = body.context_query ?? lastUser ?? "recent activity";
 
     const { snippets, recording } = await buildChatContext(searchQuery);
-    const systemInstruction = buildSystemInstruction(snippets, recording, false, {
+    let systemInstruction = buildSystemInstruction(snippets, recording, false, {
       voice: true,
     });
+
+    // Live rejects clientContent turns that include model role (closes with 1007).
+    // Keep prior chat context in the system instruction instead.
+    const recent = messages
+      .filter((m) => m.content.trim())
+      .slice(-12)
+      .map((m) => `${m.role}: ${m.content.trim().slice(0, 1200)}`)
+      .join("\n");
+    if (recent) {
+      systemInstruction = `${systemInstruction}\n\nRecent chat transcript (for continuity):\n${recent}`;
+    }
 
     const live = await mintGeminiLiveToken(systemInstruction);
     return c.json({
@@ -589,6 +601,10 @@ app.post("/chat/live/session", async (c) => {
 
 app.get("/memory/stats", async (c) => {
   return c.json(await getMemoryStats());
+});
+
+app.get("/memory/profile", async (c) => {
+  return c.json(await getUserProfile());
 });
 
 app.get("/memory", async (c) => {

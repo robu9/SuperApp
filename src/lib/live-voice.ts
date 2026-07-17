@@ -65,6 +65,9 @@ function base64ToInt16(base64: string): Int16Array {
  * 1) Backend mints ephemeral token + system instruction (with SuperMemory context)
  * 2) Renderer opens BidiGenerateContentConstrained directly
  * 3) Model: models/gemini-3.1-flash-live-preview
+ *
+ * Do NOT seed prior assistant turns via clientContent — Live closes with 1007
+ * when model-role turns are injected. History goes in the system instruction.
  */
 export class LiveVoiceSession {
   private ws: WebSocket | null = null;
@@ -74,6 +77,7 @@ export class LiveVoiceSession {
   private processor: ScriptProcessorNode | null = null;
   private nextPlayTime = 0;
   private closed = false;
+  private intentionalClose = false;
   private setupComplete = false;
   private userTranscript = "";
   private assistantTranscript = "";
@@ -123,13 +127,13 @@ export class LiveVoiceSession {
 
       ws.onopen = () => {
         // Client setup owns voice / modalities (token locks systemInstruction).
+        // Keep setup minimal — extra fields have caused Live to reject sessions.
         ws.send(
           JSON.stringify({
             setup: {
               model,
               generationConfig: {
                 responseModalities: ["AUDIO"],
-                mediaResolution: "MEDIA_RESOLUTION_HIGH",
                 speechConfig: {
                   voiceConfig: {
                     prebuiltVoiceConfig: {
@@ -138,15 +142,8 @@ export class LiveVoiceSession {
                   },
                 },
               },
-              systemInstruction: {
-                parts: [{ text: session.systemInstruction }],
-              },
               inputAudioTranscription: {},
               outputAudioTranscription: {},
-              contextWindowCompression: {
-                triggerTokens: 104857,
-                slidingWindow: { targetTokens: 52428 },
-              },
             },
           })
         );
@@ -159,7 +156,6 @@ export class LiveVoiceSession {
               window.clearTimeout(setupTimer);
               void this.startMic()
                 .then(() => {
-                  this.seedHistory(params.messages);
                   this.handlers.onReady?.();
                   succeed();
                 })
@@ -176,20 +172,29 @@ export class LiveVoiceSession {
         fail(new Error("Gemini Live websocket failed"));
       };
 
-      ws.onclose = () => {
+      ws.onclose = (event) => {
         window.clearTimeout(setupTimer);
         this.setupComplete = false;
+        const reason =
+          event.reason?.trim() ||
+          (event.code ? `code ${event.code}` : "connection closed");
         if (!settled) {
-          fail(new Error("Gemini Live closed before setup completed"));
+          fail(new Error(`Gemini Live closed before ready (${reason})`));
           return;
         }
         void this.teardownMedia();
+        if (!this.intentionalClose) {
+          this.handlers.onError?.(
+            `Live voice disconnected (${reason}). Tap Voice to reconnect.`
+          );
+        }
         this.handlers.onClosed?.();
       };
     });
   }
 
   stop(): void {
+    this.intentionalClose = true;
     this.closed = true;
     this.setupComplete = false;
     if (this.ws) {
@@ -201,24 +206,6 @@ export class LiveVoiceSession {
     }
     this.ws = null;
     void this.teardownMedia();
-  }
-
-  private seedHistory(
-    messages: Array<{ role: "user" | "assistant"; content: string }>
-  ): void {
-    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
-    const turns = messages
-      .filter((m) => m.content.trim())
-      .map((m) => ({
-        role: m.role === "assistant" ? "model" : "user",
-        parts: [{ text: m.content }],
-      }));
-    if (turns.length === 0) return;
-    this.ws.send(
-      JSON.stringify({
-        clientContent: { turns, turnComplete: false },
-      })
-    );
   }
 
   private async handleMessage(rawData: unknown): Promise<void> {
@@ -269,7 +256,6 @@ export class LiveVoiceSession {
       | { text?: string }
       | undefined;
     if (inputTranscription?.text) {
-      // Gemini Live sends incremental transcript deltas (Snappy-style append).
       this.userTranscript += inputTranscription.text;
       this.handlers.onUserTranscript?.(this.userTranscript);
     }

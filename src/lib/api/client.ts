@@ -157,6 +157,11 @@ export interface MemoryListResponse {
   pagination: { limit: number; offset: number; total: number };
 }
 
+export interface MemoryProfileResponse {
+  persona: string[];
+  aims: string[];
+}
+
 export interface MemoryStatsResponse {
   nodes: number;
   edges: number;
@@ -316,6 +321,7 @@ export const api = {
   memoryGraph: (id: string, hops = 2) =>
     request<MemoryGraphResponse>("GET", `/memory/${id}/graph?hops=${hops}`),
   memoryStats: () => request<MemoryStatsResponse>("GET", "/memory/stats"),
+  memoryProfile: () => request<MemoryProfileResponse>("GET", "/memory/profile"),
   createMemory: (body: { title: string; content: string; related_node_ids?: number[] }) =>
     request<{ id: number; node: MemoryNode }>("POST", "/memory", body),
   listConnectors: () =>

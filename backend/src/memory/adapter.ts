@@ -22,6 +22,15 @@ export function resolveSearchDocumentId(
   return result.id;
 }
 
+function cleanDisplayTitle(value: string | null | undefined): string | null {
+  if (!value?.trim()) return null;
+  const cleaned = value
+    .replace(/^\[\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?\]\s*/i, "")
+    .replace(/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?[:\s-–—]+\s*/i, "")
+    .trim();
+  return cleaned || null;
+}
+
 export function documentToMemoryNode(doc: DocumentListResponse.Memory): MemoryNode {
   const metadata = metadataRecord(doc.metadata);
   const type = (
@@ -30,11 +39,24 @@ export function documentToMemoryNode(doc: DocumentListResponse.Memory): MemoryNo
       : "memory"
   ) as MemoryNodeType;
 
+  const metaTitle =
+    typeof metadata?.title === "string" && metadata.title.trim()
+      ? metadata.title.trim()
+      : null;
+  const rawContent = doc.content ?? doc.summary ?? "";
+  const cleanedContent = rawContent
+    .replace(/^\[(?:screen|audio|meeting|memory)\][^\n]*\n?/i, "")
+    .trim();
+
   return {
     id: doc.id,
     type,
-    title: doc.title,
-    content: doc.content ?? doc.summary ?? "",
+    title:
+      cleanDisplayTitle(metaTitle) ??
+      cleanDisplayTitle(doc.title) ??
+      cleanDisplayTitle(cleanedContent.slice(0, 60)) ??
+      null,
+    content: cleanedContent || rawContent,
     metadata,
     source_type:
       typeof metadata?.source_type === "string"
@@ -43,9 +65,13 @@ export function documentToMemoryNode(doc: DocumentListResponse.Memory): MemoryNo
     source_id:
       typeof metadata?.source_id === "number" ? metadata.source_id : null,
     app_name:
-      typeof metadata?.app_name === "string" ? metadata.app_name : null,
+      typeof metadata?.app_name === "string" && metadata.app_name.trim()
+        ? metadata.app_name.trim()
+        : null,
     window_name:
-      typeof metadata?.window_name === "string" ? metadata.window_name : null,
+      typeof metadata?.window_name === "string" && metadata.window_name.trim()
+        ? metadata.window_name.trim()
+        : null,
     salience:
       typeof metadata?.salience === "number" ? metadata.salience : 0.5,
     created_at: doc.createdAt,
@@ -57,7 +83,10 @@ export function searchResultToMemoryNode(
   result: SearchMemoriesResponse.Result
 ): MemoryNode {
   const metadata = result.metadata ?? {};
-  const content = result.memory ?? result.chunk ?? "";
+  const rawContent = result.memory ?? result.chunk ?? "";
+  const content = rawContent
+    .replace(/^\[(?:screen|audio|meeting|memory)\][^\n]*\n?/i, "")
+    .trim() || rawContent;
   const type = (
     typeof metadata.superapp_type === "string"
       ? String(metadata.superapp_type)
@@ -66,13 +95,18 @@ export function searchResultToMemoryNode(
         : "document"
   ) as MemoryNodeType;
 
+  const metaTitle =
+    typeof metadata.title === "string" && metadata.title.trim()
+      ? metadata.title.trim()
+      : null;
+
   return {
     id: resolveSearchDocumentId(result),
     type,
     title:
-      typeof metadata.title === "string"
-        ? metadata.title
-        : content.slice(0, 60).toLowerCase(),
+      cleanDisplayTitle(metaTitle) ??
+      cleanDisplayTitle(content.slice(0, 60)) ??
+      "memory",
     content,
     metadata,
     source_type:
@@ -82,9 +116,13 @@ export function searchResultToMemoryNode(
     source_id:
       typeof metadata.source_id === "number" ? metadata.source_id : null,
     app_name:
-      typeof metadata.app_name === "string" ? metadata.app_name : null,
+      typeof metadata.app_name === "string" && metadata.app_name.trim()
+        ? metadata.app_name.trim()
+        : null,
     window_name:
-      typeof metadata.window_name === "string" ? metadata.window_name : null,
+      typeof metadata.window_name === "string" && metadata.window_name.trim()
+        ? metadata.window_name.trim()
+        : null,
     salience:
       typeof metadata.salience === "number"
         ? metadata.salience

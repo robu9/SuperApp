@@ -52,8 +52,16 @@ interface MemoryGraphCanvasProps {
   onSelect: (id: string | null) => void;
 }
 
+function stripDatePrefix(text: string): string {
+  return text
+    .replace(/^\[\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?\]\s*/i, "")
+    .replace(/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?[:\s-–—]+\s*/i, "")
+    .trim();
+}
+
 function nodeLabel(node: MemoryNode): string {
-  return (node.title ?? node.content.slice(0, 48)).trim() || "memory";
+  const raw = (node.title ?? node.content.slice(0, 48)).trim() || "memory";
+  return stripDatePrefix(raw) || "memory";
 }
 
 function nodeRadius(type: string, salience: number, role?: "hub" | "leaf"): number {
@@ -281,7 +289,7 @@ export function MemoryGraphCanvas({
   return (
     <div
       ref={containerRef}
-      className="relative w-full h-full min-h-0 overflow-hidden"
+      className="absolute inset-0 min-h-0 min-w-0 overflow-hidden"
       style={{ background: GRAPH.background }}
     >
       <ForceGraph2D

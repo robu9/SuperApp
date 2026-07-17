@@ -18,7 +18,7 @@ import { countNodeKinds } from "@/lib/memory-graph-layout";
 
 const NODE_LEGEND = [
   { color: "hsl(217, 96%, 48%)", label: "memory" },
-  { color: "hsl(216, 100%, 96%)", label: "hub", ring: true },
+  { color: "hsl(216, 100%, 96%)", label: "context", ring: true },
   { color: "hsla(217, 40%, 70%, 0.8)", label: "link", ring: true },
 ];
 
@@ -35,8 +35,11 @@ export function BrainSection() {
     setLoading(true);
     setError(null);
     try {
-      const list = await api.memory({ q: search?.trim() || undefined, limit: 60 });
-      const base = finalizeGraph(graphFromMemories(list.data));
+      const [list, profile] = await Promise.all([
+        api.memory({ q: search?.trim() || undefined, limit: 60 }),
+        api.memoryProfile().catch(() => ({ persona: [], aims: [] })),
+      ]);
+      const base = finalizeGraph(graphFromMemories(list.data), profile);
       setGraph(base);
       setLoading(false);
 
@@ -44,7 +47,8 @@ export function BrainSection() {
 
       setExpanding(true);
       const expanded = finalizeGraph(
-        await expandGraphForMemories(base, list.data.slice(0, 24))
+        await expandGraphForMemories(base, list.data.slice(0, 24)),
+        profile
       );
       setGraph(expanded);
     } catch (err) {
@@ -72,8 +76,11 @@ export function BrainSection() {
     if (id.startsWith("hub-")) return;
     setExpanding(true);
     try {
-      const response = await api.memoryGraph(id, 2);
-      setGraph((prev) => finalizeGraph(mergeGraphResponse(prev, response)));
+      const [response, profile] = await Promise.all([
+        api.memoryGraph(id, 2),
+        api.memoryProfile().catch(() => ({ persona: [], aims: [] })),
+      ]);
+      setGraph((prev) => finalizeGraph(mergeGraphResponse(prev, response), profile));
     } catch {
       // keep current graph
     } finally {
@@ -90,8 +97,8 @@ export function BrainSection() {
   );
 
   return (
-    <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      <div className="page-header flex items-center gap-4 shrink-0">
+    <div className="flex flex-col h-full min-h-0 w-full flex-1 overflow-hidden">
+      <div className="page-header flex items-center gap-4 shrink-0 w-full">
         <div className="min-w-0 shrink-0">
           <h1 className="page-header-title">Brain</h1>
           <p className="page-header-desc">
@@ -116,7 +123,7 @@ export function BrainSection() {
           ))}
         </div>
 
-        <div className="relative flex-1 max-w-md ml-auto">
+        <div className="relative w-full max-w-md ml-auto shrink-0">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Search nodes…"
@@ -127,8 +134,8 @@ export function BrainSection() {
         </div>
       </div>
 
-      <div className="flex flex-1 min-h-0 relative">
-        <div className="flex-1 min-w-0 relative bg-background">
+      <div className="flex flex-1 min-h-0 min-w-0 w-full relative">
+        <div className="flex-1 min-w-0 min-h-0 relative bg-background">
           {loading && graph.nodes.length === 0 && (
             <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground z-20 bg-background/80">
               <Loader2 className="w-4 h-4 animate-spin" />

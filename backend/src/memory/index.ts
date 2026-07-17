@@ -156,6 +156,33 @@ export async function backfillSupermemory(): Promise<{ ingested: number }> {
   return { ingested };
 }
 
+export async function getUserProfile(): Promise<{
+  persona: string[];
+  aims: string[];
+}> {
+  initSupermemory();
+
+  if (!(await isSupermemoryReachable())) {
+    return { persona: [], aims: [] };
+  }
+
+  try {
+    const client = getSupermemoryClient();
+    const response = await client.profile({
+      containerTag: SUPERMEMORY_CONTAINER_TAG,
+      threshold: 0.3,
+    });
+
+    return {
+      persona: (response.profile.static ?? []).filter((f) => f.trim().length > 0),
+      aims: (response.profile.dynamic ?? []).filter((f) => f.trim().length > 0),
+    };
+  } catch (err) {
+    console.warn("[supermemory] getUserProfile failed:", err);
+    return { persona: [], aims: [] };
+  }
+}
+
 export async function listNodes(params: {
   q?: string;
   type?: string;

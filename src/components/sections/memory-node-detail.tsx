@@ -18,7 +18,11 @@ function formatDate(iso: string): string {
 }
 
 function nodeLabel(node: MemoryNode): string {
-  return node.title ?? node.content.slice(0, 80);
+  const raw = node.title ?? node.content.slice(0, 80);
+  return raw
+    .replace(/^\[\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?\]\s*/i, "")
+    .replace(/^\d{4}-\d{2}-\d{2}(?:[T\s]\d{2}:\d{2}(?::\d{2})?)?[:\s-–—]+\s*/i, "")
+    .trim();
 }
 
 function Section({

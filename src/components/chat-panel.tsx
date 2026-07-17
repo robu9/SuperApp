@@ -204,7 +204,14 @@ export function ChatPanel({ className }: { className?: string }) {
       },
       onError: (message) => {
         setLiveError(message);
-        stopLive();
+        // Don't call stopLive here if already tearing down — just update UI.
+        if (liveRef.current) {
+          liveRef.current.stop();
+          liveRef.current = null;
+        }
+        setLiveVoice(false);
+        setLiveConnecting(false);
+        setLivePartials("", "");
         addMessage(sessionId, {
           role: "assistant",
           content: `sorry, live voice failed.\n\n${message}`,

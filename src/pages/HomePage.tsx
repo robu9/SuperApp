@@ -174,7 +174,7 @@ export function HomePage() {
             </AppSidebar>
           )}
 
-          <main className="flex flex-1 min-h-0 min-w-0 bg-background">
+          <main className="flex flex-1 min-h-0 min-w-0 w-full bg-background">
             {section === "home" && (
               <div className="flex flex-1 min-h-0">
                 <div className="flex-1 min-w-0">
@@ -193,7 +193,7 @@ export function HomePage() {
             {section === "workflows" && <WorkflowsSection />}
             {section === "meetings" && <MeetingsSection />}
             {section === "brain" && (
-              <div className="flex flex-1 min-h-0 min-w-0 overflow-hidden">
+              <div className="flex flex-1 min-h-0 min-w-0 w-full overflow-hidden">
                 <BrainSection />
               </div>
             )}
