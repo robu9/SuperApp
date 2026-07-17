@@ -8,36 +8,20 @@ import type { MemoryNode } from "@/lib/api/client";
 import { linkEndpointId } from "@/lib/memory-graph";
 import { getFocusSet, isLinkFocused } from "@/lib/memory-graph-layout";
 
-/** Supermemory-style dark knowledge web */
+/** Light theme — matches app primary blue (hsl 217 96% 48%) */
 const GRAPH = {
-  background: "#000000",
-  edge: "rgba(255, 255, 255, 0.55)",
-  edgeDim: "rgba(255, 255, 255, 0.08)",
-  edgeFocus: "rgba(255, 255, 255, 0.92)",
-  leaf: "#f97316",
-  leafActive: "#fb923c",
-  hubFill: "#0a0a0a",
-  hubStroke: "#f5f5f5",
-  hubText: "#ffffff",
-  dim: 0.18,
-};
-
-const APP_COLORS: Record<string, string> = {
-  chrome: "#4285f4",
-  "google chrome": "#4285f4",
-  code: "#0078d4",
-  "visual studio code": "#0078d4",
-  vscode: "#0078d4",
-  discord: "#5865f2",
-  slack: "#e01e5a",
-  spotify: "#1db954",
-  youtube: "#ff0000",
-  twitter: "#e7e9ea",
-  x: "#e7e9ea",
-  chatgpt: "#10a37f",
-  openai: "#10a37f",
-  pinterest: "#e60023",
-  cursor: "#f5f5f5",
+  background: "#ffffff",
+  edge: "hsla(217, 40%, 70%, 0.65)",
+  edgeDim: "hsla(217, 40%, 70%, 0.12)",
+  edgeFocus: "hsla(217, 96%, 48%, 0.9)",
+  leaf: "hsl(217, 96%, 48%)",
+  leafActive: "hsl(217, 86%, 58%)",
+  leafMuted: "hsl(216, 100%, 96%)",
+  hubFill: "#ffffff",
+  hubStroke: "hsl(213, 58%, 86%)",
+  hubText: "hsl(210, 33%, 6%)",
+  foreground: "hsl(210, 33%, 6%)",
+  dim: 0.22,
 };
 
 export interface GraphLink {
@@ -90,13 +74,10 @@ function nodeRadius(type: string, salience: number, role?: "hub" | "leaf"): numb
 }
 
 function hubAccent(node: GraphNode): string {
-  const app = (node.memory.app_name ?? node.label).toLowerCase();
-  for (const [key, color] of Object.entries(APP_COLORS)) {
-    if (app.includes(key)) return color;
-  }
-  if (node.type === "meeting") return "#a78bfa";
-  if (node.id === "hub-supermemory") return "#f97316";
-  return "#e5e5e5";
+  if (node.id === "hub-supermemory") return GRAPH.leaf;
+  if (node.type === "meeting") return "hsl(217, 86%, 58%)";
+  if (node.type === "app") return "hsl(217, 90%, 52%)";
+  return GRAPH.leaf;
 }
 
 export function memoryNodeToGraphNode(
@@ -229,20 +210,18 @@ export function MemoryGraphCanvas({
         const boxW = Math.max(radius * 2.2, textWidth + padX * 2);
         const boxH = Math.max(radius * 1.4, fontSize + padY * 2);
 
-        // Soft glow
         ctx.beginPath();
         ctx.arc(x, y, Math.max(boxW, boxH) * 0.55, 0, 2 * Math.PI);
-        ctx.fillStyle = isActive ? `${accent}55` : `${accent}22`;
+        ctx.fillStyle = isActive ? "hsla(217, 96%, 48%, 0.16)" : "hsla(217, 96%, 48%, 0.06)";
         ctx.fill();
 
         drawRoundedRect(ctx, x - boxW / 2, y - boxH / 2, boxW, boxH, 6 / globalScale);
-        ctx.fillStyle = GRAPH.hubFill;
+        ctx.fillStyle = isActive ? GRAPH.leafMuted : GRAPH.hubFill;
         ctx.fill();
         ctx.lineWidth = (isActive ? 2.2 : 1.4) / globalScale;
         ctx.strokeStyle = isActive ? accent : GRAPH.hubStroke;
         ctx.stroke();
 
-        // App color chip
         ctx.beginPath();
         ctx.arc(x - boxW / 2 + 8 / globalScale, y, 3.5 / globalScale, 0, 2 * Math.PI);
         ctx.fillStyle = accent;
@@ -260,7 +239,7 @@ export function MemoryGraphCanvas({
 
         if (isActive) {
           ctx.lineWidth = 2 / globalScale;
-          ctx.strokeStyle = "#ffffff";
+          ctx.strokeStyle = GRAPH.leaf;
           ctx.stroke();
 
           if (globalScale > 0.7) {
@@ -268,7 +247,7 @@ export function MemoryGraphCanvas({
             ctx.font = `500 ${fontSize}px "DM Sans", system-ui, sans-serif`;
             ctx.textAlign = "center";
             ctx.textBaseline = "top";
-            ctx.fillStyle = "#fafafa";
+            ctx.fillStyle = GRAPH.foreground;
             const text =
               node.label.length > 26 ? `${node.label.slice(0, 24)}…` : node.label;
             ctx.fillText(text, x, y + radius + 3 / globalScale);
@@ -335,7 +314,7 @@ export function MemoryGraphCanvas({
         onNodeHover={(node) => onHover(node ? (node as GraphNode).id : null)}
         onBackgroundClick={() => onSelect(null)}
       />
-      <div className="pointer-events-none absolute bottom-3 left-3 text-[11px] tracking-wide text-white/40">
+      <div className="pointer-events-none absolute bottom-3 left-3 text-[11px] tracking-wide text-muted-foreground">
         drag nodes · scroll to zoom · click to inspect
       </div>
     </div>

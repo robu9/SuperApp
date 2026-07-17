@@ -17,9 +17,9 @@ import {
 import { countNodeKinds } from "@/lib/memory-graph-layout";
 
 const NODE_LEGEND = [
-  { color: "#f97316", label: "memory" },
-  { color: "#e5e5e5", label: "hub" },
-  { color: "rgba(255,255,255,0.55)", label: "link", ring: true },
+  { color: "hsl(217, 96%, 48%)", label: "memory" },
+  { color: "hsl(216, 100%, 96%)", label: "hub", ring: true },
+  { color: "hsla(217, 40%, 70%, 0.8)", label: "link", ring: true },
 ];
 
 export function BrainSection() {
@@ -128,9 +128,9 @@ export function BrainSection() {
       </div>
 
       <div className="flex flex-1 min-h-0 relative">
-        <div className="flex-1 min-w-0 relative bg-black">
+        <div className="flex-1 min-w-0 relative bg-background">
           {loading && graph.nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-white/50 z-20 bg-black/80">
+            <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm text-muted-foreground z-20 bg-background/80">
               <Loader2 className="w-4 h-4 animate-spin" />
               Loading memory graph…
             </div>
@@ -144,8 +144,8 @@ export function BrainSection() {
 
           {!loading && !error && graph.nodes.length === 0 && (
             <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center z-20">
-              <Brain className="w-10 h-10 text-white/40" />
-              <p className="text-sm text-white/50 max-w-md">
+              <Brain className="w-10 h-10 text-muted-foreground" />
+              <p className="text-sm text-muted-foreground max-w-md">
                 No memories yet. Start recording and SuperMemory will build your graph
                 automatically.
               </p>
