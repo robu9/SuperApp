@@ -1,13 +1,68 @@
 import React, { useEffect, useRef, useState } from "react";
 import { Send } from "lucide-react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
+import { electron } from "@/lib/electron";
 import { cn } from "@/lib/utils";
 import {
   useChatStore,
   simulateAssistantReply,
   type ChatMessage,
 } from "@/lib/stores/chat-store";
+
+function getSafeExternalUrl(href?: string): string | null {
+  if (!href) return null;
+
+  try {
+    const url = new URL(href);
+    return url.protocol === "http:" || url.protocol === "https:"
+      ? url.toString()
+      : null;
+  } catch {
+    return null;
+  }
+}
+
+function MarkdownMessage({ content }: { content: string }) {
+  return (
+    <ReactMarkdown
+      remarkPlugins={[remarkGfm]}
+      urlTransform={(url) => getSafeExternalUrl(url) ?? ""}
+      components={{
+        a: ({ href, children, ...props }) => {
+          const safeUrl = getSafeExternalUrl(href);
+          if (!safeUrl) return <span>{children}</span>;
+
+          return (
+            <a
+              {...props}
+              href={safeUrl}
+              onClick={(event) => {
+                event.preventDefault();
+                if (electron?.openExternal) {
+                  void electron.openExternal(safeUrl);
+                } else {
+                  window.open(safeUrl, "_blank", "noopener,noreferrer");
+                }
+              }}
+            >
+              {children}
+            </a>
+          );
+        },
+        table: ({ children, ...props }) => (
+          <div className="max-w-full overflow-x-auto">
+            <table {...props}>{children}</table>
+          </div>
+        ),
+      }}
+    >
+      {content}
+    </ReactMarkdown>
+  );
+}
 
 function MessageBlock({ message }: { message: ChatMessage }) {
   const isUser = message.role === "user";
@@ -24,13 +79,24 @@ function MessageBlock({ message }: { message: ChatMessage }) {
       </div>
       <div
         className={cn(
-          "rounded-lg px-4 py-3 text-sm leading-relaxed max-w-[85%] whitespace-pre-wrap",
+          "min-w-0 max-w-[85%] rounded-lg px-4 py-3 text-sm leading-relaxed",
           isUser
-            ? "bg-primary text-primary-foreground"
-            : "bg-surface border border-border text-foreground"
+            ? "whitespace-pre-wrap bg-primary text-primary-foreground"
+            : [
+                "prose prose-sm max-w-none break-words border border-border bg-surface text-foreground",
+                "prose-headings:mb-2 prose-headings:mt-4 prose-headings:text-foreground",
+                "prose-p:my-2 prose-p:text-foreground prose-ul:my-2 prose-ol:my-2",
+                "prose-li:my-0.5 prose-li:text-foreground prose-strong:text-foreground",
+                "prose-blockquote:border-border prose-blockquote:text-muted-foreground",
+                "prose-a:text-primary prose-a:cursor-pointer prose-a:no-underline hover:prose-a:underline",
+                "prose-code:break-words prose-code:font-mono prose-code:text-foreground prose-code:before:content-none prose-code:after:content-none",
+                "prose-pre:max-w-full prose-pre:overflow-x-auto prose-pre:whitespace-pre prose-pre:rounded-md prose-pre:border prose-pre:border-border prose-pre:bg-surface-secondary",
+                "prose-table:my-2 prose-th:text-foreground prose-td:text-foreground",
+                "[&>*:first-child]:mt-0 [&>*:last-child]:mb-0",
+              ]
         )}
       >
-        {message.content}
+        {isUser ? message.content : <MarkdownMessage content={message.content} />}
       </div>
     </div>
   );
