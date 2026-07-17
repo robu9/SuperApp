@@ -7,7 +7,15 @@ import ForceGraph2D, {
 import type { MemoryNode } from "@/lib/api/client";
 import { linkEndpointId } from "@/lib/memory-graph";
 import { getFocusSet, isLinkFocused } from "@/lib/memory-graph-layout";
-import { useTheme } from "@/components/theme-provider";
+
+const GRAPH_PALETTE = {
+  background: "hsl(0 0% 100%)",
+  foreground: "hsl(210 33% 6%)",
+  muted: "hsl(210 10% 40%)",
+  border: "hsl(213 58% 86%)",
+  accent: "hsl(216 100% 96%)",
+  primary: "hsl(217 96% 48%)",
+};
 
 export interface GraphLink {
   source: string | GraphNode;
@@ -71,22 +79,12 @@ export function MemoryGraphCanvas({
 }: MemoryGraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink>>();
-  const { isDark } = useTheme();
   const [size, setSize] = React.useState({ width: 800, height: 600 });
 
   const activeId = selectedId ?? hoverId;
   const focus = useMemo(() => getFocusSet(data, activeId), [data, activeId]);
 
-  const palette = useMemo(
-    () => ({
-      background: isDark ? "hsl(0 0% 7%)" : "hsl(0 0% 100%)",
-      foreground: isDark ? "hsl(0 0% 100%)" : "hsl(0 0% 0%)",
-      muted: isDark ? "hsl(0 0% 40%)" : "hsl(0 0% 40%)",
-      border: isDark ? "hsl(0 0% 25%)" : "hsl(0 0% 80%)",
-      accent: isDark ? "hsl(0 0% 18%)" : "hsl(0 0% 96%)",
-    }),
-    [isDark]
-  );
+  const palette = GRAPH_PALETTE;
 
   useEffect(() => {
     const el = containerRef.current;
@@ -147,10 +145,10 @@ export function MemoryGraphCanvas({
       ctx.arc(x, y, radius, 0, 2 * Math.PI);
 
       if (isActive) {
-        ctx.fillStyle = palette.foreground;
+        ctx.fillStyle = palette.primary;
         ctx.fill();
         ctx.lineWidth = 2 / globalScale;
-        ctx.strokeStyle = palette.foreground;
+        ctx.strokeStyle = palette.primary;
         ctx.stroke();
       } else if (inFocus) {
         ctx.fillStyle = palette.background;
@@ -168,7 +166,7 @@ export function MemoryGraphCanvas({
 
       if (globalScale > 0.55 && isActive) {
         const fontSize = Math.max(10 / globalScale, 3);
-        ctx.font = `${fontSize}px "JetBrains Mono", monospace`;
+        ctx.font = `${fontSize}px "DM Mono", monospace`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
         ctx.fillStyle = isActive ? palette.background : palette.foreground;

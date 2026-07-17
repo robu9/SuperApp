@@ -11,14 +11,15 @@ export default {
     extend: {
       fontFamily: {
         sans: [
-          "Inter",
+          "DM Sans",
           "system-ui",
           "-apple-system",
           "BlinkMacSystemFont",
           "Segoe UI",
           "sans-serif",
         ],
-        mono: ["SF Mono", "ui-monospace", "Menlo", "Consolas", "monospace"],
+        heading: ["Space Grotesk", "system-ui", "sans-serif"],
+        mono: ["DM Mono", "ui-monospace", "Menlo", "Consolas", "monospace"],
       },
       fontSize: {
         xs: ["var(--text-xs)", { lineHeight: "1rem" }],

@@ -131,7 +131,7 @@ export function MemoryGraphLaneCanvas({
             textAnchor="middle"
             fill="hsl(var(--foreground))"
             style={{
-              fontFamily: "Inter, system-ui, sans-serif",
+              fontFamily: "DM Sans, system-ui, sans-serif",
               fontSize: 10,
               fontWeight: 600,
             }}
@@ -151,7 +151,7 @@ export function MemoryGraphLaneCanvas({
           textAnchor="middle"
           fill="hsl(var(--muted-foreground))"
           style={{
-            fontFamily: "Inter, system-ui, sans-serif",
+            fontFamily: "DM Sans, system-ui, sans-serif",
             fontSize: 10,
             fontWeight: 500,
           }}

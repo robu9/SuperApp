@@ -1,10 +1,7 @@
 import { create } from "zustand";
 import { persist } from "zustand/middleware";
 
-export type Theme = "light" | "dark" | "system";
-
 export interface AppSettings {
-  theme: Theme;
   translucentSidebar: boolean;
   disableTimeline: boolean;
   fontSize: number;
@@ -20,7 +17,6 @@ export const useSettingsStore = create<SettingsState>()(
   persist(
     (set) => ({
       settings: {
-        theme: "system",
         translucentSidebar: true,
         disableTimeline: false,
         fontSize: 16,
@@ -35,10 +31,10 @@ export const useSettingsStore = create<SettingsState>()(
   )
 );
 
-export function applyTheme(theme: Theme) {
-  const isDark =
-    theme === "dark" ||
-    (theme === "system" && window.matchMedia("(prefers-color-scheme: dark)").matches);
-  document.documentElement.classList.toggle("dark", isDark);
-  document.documentElement.style.setProperty("--font-size-base", `${useSettingsStore.getState().settings.fontSize}px`);
+export function applyTheme() {
+  document.documentElement.classList.remove("dark");
+  document.documentElement.style.setProperty(
+    "--font-size-base",
+    `${useSettingsStore.getState().settings.fontSize}px`
+  );
 }

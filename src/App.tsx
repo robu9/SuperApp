@@ -58,7 +58,7 @@ export default function App() {
       <HashRouter>
         <AppRoutes />
       </HashRouter>
-      <Toaster position="bottom-right" theme="system" />
+      <Toaster position="bottom-right" theme="light" />
     </ThemeProvider>
   );
 }

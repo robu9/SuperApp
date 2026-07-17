@@ -4,12 +4,7 @@ import App from "./App";
 import "./index.css";
 import { applyTheme } from "@/lib/stores/settings-store";
 
-applyTheme(
-  (JSON.parse(localStorage.getItem("superapp-settings") || "{}")?.state?.settings?.theme as
-    | "light"
-    | "dark"
-    | "system") || "system"
-);
+applyTheme();
 
 ReactDOM.createRoot(document.getElementById("root")!).render(
   <React.StrictMode>

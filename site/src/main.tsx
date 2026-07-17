@@ -164,12 +164,17 @@ function App() {
         <section className="hero shell">
           <div className="hero-badge">
             <span aria-hidden="true" />
-            Local AI workspace
+            Powered by Supermemory
           </div>
           <h1>Your context, connected</h1>
           <p className="hero-copy">
             SuperApp captures the work happening on your screen and in your meetings,
-            then turns it into context you can search, chat with, and act on.
+            then turns it into context you can search, chat with, and act on — backed by
+            the same memory infrastructure as{" "}
+            <a href="https://supermemory.ai/" className="hero-powered" target="_blank" rel="noreferrer">
+              Supermemory
+            </a>
+            .
           </p>
           <div className="download-row">
             <DownloadLink platform={platform} variant="primary" size="lg" />
@@ -311,7 +316,12 @@ function App() {
       <footer className="site-footer">
         <div className="shell">
           <span>© {new Date().getFullYear()} SuperApp</span>
-          <span>Built for local context</span>
+          <span>
+            Memory by{" "}
+            <a href="https://supermemory.ai/" target="_blank" rel="noreferrer">
+              Supermemory
+            </a>
+          </span>
         </div>
       </footer>
 

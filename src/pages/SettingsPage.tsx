@@ -13,7 +13,6 @@ import {
 import { AppSidebar } from "@/components/app-sidebar";
 import { Button } from "@/components/ui/button";
 import { cn, formatShortcut } from "@/lib/utils";
-import { useTheme } from "@/components/theme-provider";
 import { useSettingsStore } from "@/lib/stores/settings-store";
 import { useRecordingStore } from "@/lib/stores/recording-store";
 import { api, type AppConfig } from "@/lib/api/client";
@@ -135,26 +134,10 @@ function StatusBadge({ ok, label }: { ok: boolean; label: string }) {
 }
 
 function DisplaySection() {
-  const { theme, setTheme } = useTheme();
   const { settings, setSetting } = useSettingsStore();
 
   return (
     <>
-      <SettingRow label="Theme" description="Light, dark, or system">
-        <div className="flex gap-2">
-          {(["light", "dark", "system"] as const).map((t) => (
-            <Button
-              key={t}
-              variant={theme === t ? "default" : "outline"}
-              size="sm"
-              onClick={() => setTheme(t)}
-              className="capitalize"
-            >
-              {t}
-            </Button>
-          ))}
-        </div>
-      </SettingRow>
       <SettingRow label="Translucent sidebar" description="macOS vibrancy effect">
         <Toggle
           checked={settings.translucentSidebar}
@@ -174,7 +157,7 @@ function DisplaySection() {
           max={20}
           value={settings.fontSize}
           onChange={(e) => setSetting("fontSize", Number(e.target.value))}
-          className="w-32 accent-foreground"
+          className="w-32 accent-primary"
         />
       </SettingRow>
     </>
