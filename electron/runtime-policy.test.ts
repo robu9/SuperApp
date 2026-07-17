@@ -7,6 +7,7 @@ import { initialRuntimeStatus } from "./runtime-types.ts";
 import {
   isSupportedRuntimePlatform,
   nextRuntimeStatus,
+  redactRuntimeDiagnostics,
   readManagedApiKey,
 } from "./runtime-policy.ts";
 
@@ -40,4 +41,15 @@ test("managed API key supports current and legacy filenames", () => {
   } finally {
     rmSync(directory, { recursive: true, force: true });
   }
+});
+
+test("runtime diagnostics redact generated and provider API keys", () => {
+  assert.equal(
+    redactRuntimeDiagnostics("api key     sm_abcdefghijklmnopqrstuvwxyz123456"),
+    "api key     [REDACTED]",
+  );
+  assert.equal(
+    redactRuntimeDiagnostics("provider failed with sk-abcdefghijklmnopqrstuvwxyz"),
+    "provider failed with [REDACTED]",
+  );
 });

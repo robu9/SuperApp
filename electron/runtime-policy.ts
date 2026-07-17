@@ -6,6 +6,16 @@ export function isSupportedRuntimePlatform(platform: NodeJS.Platform): boolean {
   return platform === "darwin" || platform === "linux";
 }
 
+export function redactRuntimeDiagnostics(message: string): string {
+  return message
+    .replace(/\b(sm_[A-Za-z0-9_-]{16,})\b/g, "[REDACTED]")
+    .replace(/\b(sk-[A-Za-z0-9_-]{16,})\b/g, "[REDACTED]")
+    .replace(
+      /(api[\s_-]*key\s*(?::|=|\s)\s*)(\S+)/gi,
+      "$1[REDACTED]",
+    );
+}
+
 export function readManagedApiKey(memoryDir: string): string {
   for (const relative of [
     "api-key",

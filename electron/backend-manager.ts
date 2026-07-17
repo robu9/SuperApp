@@ -14,6 +14,7 @@ const API_URL = `http://127.0.0.1:${API_PORT}`;
 
 let backendProcess: ChildProcess | null = null;
 let backendUtilityProcess: UtilityProcess | null = null;
+type BackendLogSink = (message: string) => void;
 
 function loadEnvFile(envPath: string): Record<string, string> {
   const vars: Record<string, string> = {};
@@ -131,7 +132,8 @@ async function waitForPortFree(
 }
 
 export async function startBackend(
-  envOverrides: NodeJS.ProcessEnv = {}
+  envOverrides: NodeJS.ProcessEnv = {},
+  logSink?: BackendLogSink,
 ): Promise<void> {
   // In dev, scripts/dev.mjs owns the backend process. Electron only connects so
   // main-process hot-reload does not kill ffmpeg/audio children on Windows.
@@ -169,6 +171,8 @@ export async function startBackend(
 
   const { args, cwd } = getBackendEntry();
   const entry = args[0];
+  let startupFailure: string | null = null;
+  let backendOutput = "";
   backendUtilityProcess = utilityProcess.fork(entry, [], {
     cwd,
     env: { ...getEnvForBackend(), ...envOverrides },
@@ -176,20 +180,29 @@ export async function startBackend(
     serviceName: "SuperApp Capture Engine",
   });
 
-  backendUtilityProcess.stdout?.on("data", (chunk: Buffer) => {
-    console.log(`[backend] ${chunk.toString().trim()}`);
-  });
-
-  backendUtilityProcess.stderr?.on("data", (chunk: Buffer) => {
-    console.error(`[backend] ${chunk.toString().trim()}`);
-  });
+  const recordOutput = (chunk: Buffer, isError: boolean) => {
+    const text = chunk.toString().trim();
+    if (!text) return;
+    backendOutput = `${backendOutput}\n${text}`.slice(-16_000);
+    logSink?.(text);
+    if (isError) console.error(`[backend] ${text}`);
+    else console.log(`[backend] ${text}`);
+  };
+  backendUtilityProcess.stdout?.on("data", (chunk: Buffer) =>
+    recordOutput(chunk, false),
+  );
+  backendUtilityProcess.stderr?.on("data", (chunk: Buffer) =>
+    recordOutput(chunk, true),
+  );
 
   backendUtilityProcess.on("exit", (code) => {
+    startupFailure = `Backend exited before becoming healthy (${code ?? "signal"}).${backendOutput}`;
+    logSink?.(`process exited with code ${code ?? "signal"}`);
     console.log(`[backend] exited with code ${code}`);
     backendUtilityProcess = null;
   });
 
-  await waitForHealth(30);
+  await waitForHealth(30, () => startupFailure);
 
   const chatReady = await backendHasChatRoute();
   if (!chatReady) {
@@ -209,8 +222,13 @@ export function stopBackend(): void {
   }
 }
 
-export async function waitForHealth(maxAttempts = 30): Promise<void> {
+export async function waitForHealth(
+  maxAttempts = 30,
+  getStartupFailure?: () => string | null,
+): Promise<void> {
   for (let i = 0; i < maxAttempts; i++) {
+    const startupFailure = getStartupFailure?.();
+    if (startupFailure) throw new Error(startupFailure);
     try {
       const res = await fetch(`${API_URL}/health`);
       if (res.ok) return;
@@ -219,6 +237,8 @@ export async function waitForHealth(maxAttempts = 30): Promise<void> {
     }
     await new Promise((r) => setTimeout(r, 500));
   }
+  const startupFailure = getStartupFailure?.();
+  if (startupFailure) throw new Error(startupFailure);
   throw new Error("Backend failed to start on port 3030");
 }
 

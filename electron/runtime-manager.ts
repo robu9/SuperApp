@@ -22,6 +22,7 @@ import { startBackend, stopBackend } from "./backend-manager.js";
 import {
   isSupportedRuntimePlatform,
   nextRuntimeStatus,
+  redactRuntimeDiagnostics,
   readManagedApiKey,
 } from "./runtime-policy.js";
 
@@ -62,6 +63,7 @@ export class RuntimeManager {
   private installProcess: UtilityProcess | null = null;
   private activeStart: Promise<void> | null = null;
   private memoryOutput = "";
+  private existingLogSanitized = false;
 
   getStatus = (): RuntimeStatus => ({ ...this.status });
 
@@ -102,7 +104,19 @@ export class RuntimeManager {
     try {
       const { root, log } = this.paths();
       mkdirSync(root, { recursive: true });
-      appendFileSync(log, `[${new Date().toISOString()}] ${message}\n`);
+      if (!this.existingLogSanitized) {
+        this.existingLogSanitized = true;
+        if (existsSync(log)) {
+          const existing = readFileSync(log, "utf8");
+          const sanitized = redactRuntimeDiagnostics(existing);
+          if (sanitized !== existing) writeFileSync(log, sanitized, { mode: 0o600 });
+        }
+      }
+      appendFileSync(
+        log,
+        `[${new Date().toISOString()}] ${redactRuntimeDiagnostics(message)}\n`,
+      );
+      chmodSync(log, 0o600);
     } catch {
       // Logging must never prevent startup.
     }
@@ -218,10 +232,13 @@ export class RuntimeManager {
         this.update("starting-backend", "connecting to capture backend", 75, {
           memoryReady: true,
         });
-        await startBackend({
-          SUPERMEMORY_BASE_URL: MEMORY_URL,
-          SUPERMEMORY_LOCAL_URL: MEMORY_URL,
-        });
+        await startBackend(
+          {
+            SUPERMEMORY_BASE_URL: MEMORY_URL,
+            SUPERMEMORY_LOCAL_URL: MEMORY_URL,
+          },
+          (message) => this.writeLog(`backend: ${message}`),
+        );
         this.update("ready", "local runtime ready", 100, {
           memoryReady: true,
           backendReady: true,
@@ -291,13 +308,16 @@ export class RuntimeManager {
         memoryReady: true,
       });
       try {
-        await startBackend({
-          SUPERMEMORY_BASE_URL: MEMORY_URL,
-          SUPERMEMORY_LOCAL_URL: MEMORY_URL,
-          SUPERMEMORY_API_KEY: readManagedApiKey(paths.memory),
-          SUPERAPP_NATIVE_DIR: path.join(process.resourcesPath, "backend-native"),
-          ...providerEnv,
-        });
+        await startBackend(
+          {
+            SUPERMEMORY_BASE_URL: MEMORY_URL,
+            SUPERMEMORY_LOCAL_URL: MEMORY_URL,
+            SUPERMEMORY_API_KEY: readManagedApiKey(paths.memory),
+            SUPERAPP_NATIVE_DIR: path.join(process.resourcesPath, "backend-native"),
+            ...providerEnv,
+          },
+          (message) => this.writeLog(`backend: ${message}`),
+        );
       } catch (error) {
         throw this.runtimeError(
           String(error).includes("already in use") ? "PORT_IN_USE" : "BACKEND_START_FAILED",
