@@ -1,61 +1,59 @@
 import React, { useCallback, useEffect, useMemo, useState } from "react";
-import {
-  Brain,
-  Loader2,
-  Search,
-  X,
-} from "lucide-react";
+import { Brain, Loader2, Search } from "lucide-react";
 import { Input } from "@/components/ui/input";
-import { Button } from "@/components/ui/button";
-import { api, type MemoryNode } from "@/lib/api/client";
+import { api } from "@/lib/api/client";
 import {
   MemoryGraphCanvas,
   type MemoryGraphData,
 } from "@/components/sections/memory-graph-canvas";
+import { MemoryGraphLaneCanvas } from "@/components/sections/memory-graph-lane-canvas";
+import { MemoryNodeDetail } from "@/components/sections/memory-node-detail";
 import {
   expandGraphForMemories,
-  filterGraphHighlight,
   finalizeGraph,
   getNodeById,
   graphFromMemories,
-  linkEndpointId,
   mergeGraphResponse,
 } from "@/lib/memory-graph";
+import {
+  buildFlowLanes,
+  buildTypeLanes,
+  countNodeKinds,
+  type GraphViewMode,
+} from "@/lib/memory-graph-layout";
+import { cn } from "@/lib/utils";
 
-function formatDate(iso: string): string {
-  const date = new Date(iso);
-  if (Number.isNaN(date.getTime())) return iso;
-  return date.toLocaleDateString(undefined, { month: "short", day: "numeric" });
-}
+const VIEW_MODES: { id: GraphViewMode; label: string }[] = [
+  { id: "flow", label: "flow" },
+  { id: "force", label: "force" },
+  { id: "type", label: "type" },
+  { id: "story", label: "story" },
+];
 
-function nodeLabel(node: MemoryNode): string {
-  return (node.title ?? node.content.slice(0, 60)).toLowerCase();
-}
+const NODE_LEGEND = [
+  { type: "screen_chunk", label: "screen" },
+  { type: "audio_chunk", label: "audio" },
+  { type: "memory", label: "memory" },
+  { type: "topic", label: "topic" },
+  { type: "meeting", label: "meeting" },
+];
 
 export function BrainSection() {
   const [query, setQuery] = useState("");
-  const [stats, setStats] = useState<{ nodes: number; edges: number } | null>(null);
+  const [mode, setMode] = useState<GraphViewMode>("flow");
   const [loading, setLoading] = useState(true);
   const [expanding, setExpanding] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [selectedId, setSelectedId] = useState<string | null>(null);
+  const [hoverId, setHoverId] = useState<string | null>(null);
   const [graph, setGraph] = useState<MemoryGraphData>({ nodes: [], links: [] });
 
   const loadGraph = useCallback(async (search?: string) => {
     setLoading(true);
     setError(null);
     try {
-      const [list, memoryStats] = await Promise.all([
-        api.memory({ q: search?.trim() || undefined, limit: 40 }),
-        api.memoryStats(),
-      ]);
-
-      setStats({
-        nodes: memoryStats.nodes,
-        edges: memoryStats.edges || list.data.length,
-      });
-
-      const base = finalizeGraph(graphFromMemories(list.data));
+      const list = await api.memory({ q: search?.trim() || undefined, limit: 40 });
+      const base = graphFromMemories(list.data);
       setGraph(base);
       setLoading(false);
 
@@ -63,14 +61,9 @@ export function BrainSection() {
 
       setExpanding(true);
       const expanded = finalizeGraph(
-        await expandGraphForMemories(base, list.data.slice(0, 24))
+        await expandGraphForMemories(base, list.data.slice(0, 12))
       );
       setGraph(expanded);
-      setStats((prev) =>
-        prev
-          ? { ...prev, edges: expanded.links.length }
-          : { nodes: expanded.nodes.length, edges: expanded.links.length }
-      );
     } catch (err) {
       setError(err instanceof Error ? err.message : "failed to load supermemory");
     } finally {
@@ -90,12 +83,10 @@ export function BrainSection() {
     return () => clearTimeout(timer);
   }, [query, loadGraph]);
 
-  const highlightIds = useMemo(
-    () => filterGraphHighlight(graph, query),
-    [graph, query]
-  );
-
-  const selected = getNodeById(graph, selectedId);
+  const typeLanes = useMemo(() => buildTypeLanes(graph), [graph]);
+  const flowLanes = useMemo(() => buildFlowLanes(graph), [graph]);
+  const detailId = selectedId ?? hoverId;
+  const detailNode = getNodeById(graph, detailId);
 
   const expandSelected = useCallback(async (id: string) => {
     setExpanding(true);
@@ -117,34 +108,22 @@ export function BrainSection() {
     [expandSelected]
   );
 
-  const neighborCount = useMemo(() => {
-    if (!selectedId) return 0;
-    return graph.links.filter((l) => {
-      const sourceId = linkEndpointId(l.source);
-      const targetId = linkEndpointId(l.target);
-      return sourceId === selectedId || targetId === selectedId;
-    }).length;
-  }, [graph.links, selectedId]);
-
   return (
     <div className="flex flex-col h-full min-h-0 overflow-hidden">
-      <div className="px-6 py-4 border-b border-border flex items-center justify-between gap-4 shrink-0">
-        <div className="min-w-0">
-          <h1 className="text-2xl font-mono lowercase">brain</h1>
-          <p className="text-sm text-muted-foreground font-mono mt-0.5">
-            supermemory graph ·{" "}
-            {stats
-              ? `${graph.nodes.length} visible · ${graph.links.length} connections`
-              : "loading..."}
+      <div className="px-6 py-3 border-b border-border flex items-center gap-4 shrink-0">
+        <div className="min-w-0 shrink-0">
+          <h1 className="text-xl font-mono lowercase">brain</h1>
+          <p className="text-[11px] text-muted-foreground font-mono mt-0.5">
+            {graph.nodes.length} nodes · {graph.links.length} edges · {countNodeKinds(graph)} kinds
             {expanding && " · expanding..."}
           </p>
         </div>
 
-        <div className="relative w-full max-w-xs">
+        <div className="relative flex-1 max-w-md ml-auto">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
-            placeholder="search & highlight nodes..."
-            className="pl-10"
+            placeholder="search nodes..."
+            className="pl-10 h-9"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
           />
@@ -154,133 +133,119 @@ export function BrainSection() {
       <div className="flex flex-1 min-h-0 relative">
         <div className="flex-1 min-w-0 relative">
           {loading && graph.nodes.length === 0 && (
-            <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm font-mono text-muted-foreground z-10 bg-background/80">
+            <div className="absolute inset-0 flex items-center justify-center gap-2 text-sm font-mono text-muted-foreground z-20 bg-background/80">
               <Loader2 className="w-4 h-4 animate-spin" />
               loading memory graph...
             </div>
           )}
 
           {error && (
-            <div className="absolute inset-0 flex items-center justify-center p-6 z-10">
+            <div className="absolute inset-0 flex items-center justify-center p-6 z-20">
               <p className="text-sm font-mono text-destructive">{error}</p>
             </div>
           )}
 
           {!loading && !error && graph.nodes.length === 0 && (
-            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center z-10">
+            <div className="absolute inset-0 flex flex-col items-center justify-center gap-3 p-8 text-center z-20">
               <Brain className="w-10 h-10 text-muted-foreground" />
               <p className="text-sm font-mono text-muted-foreground max-w-md">
-                no memories yet — start recording and supermemory will build your
-                graph automatically.
+                no memories yet — start recording and supermemory will build your graph automatically.
               </p>
             </div>
           )}
 
-          {graph.nodes.length > 0 && (
+          {graph.nodes.length > 0 && mode === "force" && (
             <MemoryGraphCanvas
               data={graph}
               selectedId={selectedId}
-              highlightIds={highlightIds}
+              hoverId={hoverId}
+              onHover={setHoverId}
               onSelect={handleSelect}
             />
           )}
 
-          <div className="absolute top-4 left-4 border border-border bg-background/90 backdrop-blur-sm px-3 py-2 max-w-[240px]">
-            <p className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
-              controls
+          {graph.nodes.length > 0 && mode === "flow" && (
+            <MemoryGraphLaneCanvas
+              data={graph}
+              lanes={flowLanes}
+              mode="flow"
+              focusId={hoverId ?? selectedId}
+              onFocus={setHoverId}
+              onSelect={(id) => handleSelect(id)}
+            />
+          )}
+
+          {graph.nodes.length > 0 && mode === "type" && (
+            <MemoryGraphLaneCanvas
+              data={graph}
+              lanes={typeLanes}
+              mode="type"
+              focusId={hoverId ?? selectedId}
+              onFocus={setHoverId}
+              onSelect={(id) => handleSelect(id)}
+            />
+          )}
+
+          {graph.nodes.length > 0 && mode === "story" && (
+            <MemoryGraphLaneCanvas
+              data={graph}
+              lanes={[]}
+              mode="story"
+              focusId={hoverId ?? selectedId}
+              onFocus={setHoverId}
+              onSelect={(id) => handleSelect(id)}
+            />
+          )}
+
+          <div className="absolute bottom-4 left-4 border border-border bg-background/95 backdrop-blur-sm px-3 py-2 max-w-[200px] z-10">
+            <p className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground mb-2">
+              node type
             </p>
-            <p className="text-[11px] font-mono text-muted-foreground mt-1 leading-relaxed">
-              scroll to zoom · drag canvas to pan · click node to inspect · drag node to reposition
-            </p>
+            <div className="flex flex-col gap-1.5">
+              {NODE_LEGEND.map((item) => (
+                <div key={item.type} className="flex items-center gap-2">
+                  <span className="w-2.5 h-2.5 border border-foreground bg-background shrink-0" />
+                  <span className="text-[10px] font-mono lowercase text-muted-foreground">
+                    {item.label}
+                  </span>
+                </div>
+              ))}
+            </div>
+          </div>
+
+          <div className="absolute bottom-4 left-1/2 -translate-x-1/2 z-10 flex border border-border bg-background/95 backdrop-blur-sm">
+            {VIEW_MODES.map((item) => (
+              <button
+                key={item.id}
+                type="button"
+                onClick={() => setMode(item.id)}
+                className={cn(
+                  "px-4 py-2 text-[10px] font-mono uppercase tracking-wide border-r border-border last:border-r-0 transition-colors duration-150",
+                  mode === item.id
+                    ? "bg-foreground text-background"
+                    : "text-muted-foreground hover:bg-accent hover:text-foreground"
+                )}
+              >
+                {item.label}
+              </button>
+            ))}
           </div>
         </div>
 
-        {selected && (
-          <aside className="w-80 shrink-0 border-l border-border flex flex-col min-h-0 bg-background">
-            <div className="px-4 py-3 border-b border-border flex items-start justify-between gap-2">
-              <div className="min-w-0">
-                <p className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground">
-                  memory node
-                </p>
-                <p className="font-mono text-sm lowercase truncate mt-0.5">
-                  {nodeLabel(selected)}
-                </p>
-              </div>
-              <Button
-                variant="ghost"
-                size="icon"
-                className="h-7 w-7 shrink-0"
-                onClick={() => setSelectedId(null)}
-              >
-                <X className="w-3.5 h-3.5" />
-              </Button>
-            </div>
-
-            <div className="flex-1 overflow-y-auto scrollbar-minimal p-4 flex flex-col gap-4">
-              <div className="flex flex-wrap gap-2">
-                <span className="text-[10px] font-mono uppercase tracking-wide border border-border px-2 py-0.5">
-                  {selected.type}
-                </span>
-                <span className="text-[10px] font-mono uppercase tracking-wide border border-border px-2 py-0.5 text-muted-foreground">
-                  {formatDate(selected.created_at)}
-                </span>
-                <span className="text-[10px] font-mono uppercase tracking-wide border border-border px-2 py-0.5 text-muted-foreground">
-                  {neighborCount} links
-                </span>
-              </div>
-
-              {selected.app_name && (
-                <p className="text-xs font-mono text-muted-foreground lowercase">
-                  {selected.app_name}
-                  {selected.window_name ? ` · ${selected.window_name}` : ""}
-                </p>
-              )}
-
-              <p className="text-sm text-muted-foreground font-mono whitespace-pre-wrap leading-relaxed">
-                {selected.content.slice(0, 2000)}
-                {selected.content.length > 2000 ? "..." : ""}
-              </p>
-
-              <div>
-                <p className="text-[10px] font-mono uppercase tracking-wide text-muted-foreground mb-2">
-                  connections
-                </p>
-                <div className="flex flex-col border border-border">
-                  {graph.links
-                    .filter((l) => {
-                      const sourceId = linkEndpointId(l.source);
-                      const targetId = linkEndpointId(l.target);
-                      return sourceId === selectedId || targetId === selectedId;
-                    })
-                    .map((link) => {
-                      const sourceId = linkEndpointId(link.source);
-                      const targetId = linkEndpointId(link.target);
-                      const otherId = sourceId === selectedId ? targetId : sourceId;
-                      const other = graph.nodes.find((n) => n.id === otherId);
-                      if (!other) return null;
-                      return (
-                        <button
-                          key={`${link.source}-${link.target}-${link.relation}`}
-                          onClick={() => handleSelect(otherId)}
-                          className="flex items-center justify-between px-3 py-2 border-b border-border last:border-b-0 hover:bg-accent transition-colors duration-150 text-left"
-                        >
-                          <span className="font-mono text-xs lowercase truncate min-w-0">
-                            {other.label}
-                          </span>
-                          <span className="text-[10px] font-mono uppercase text-muted-foreground shrink-0 ml-2">
-                            {link.relation.replace(/_/g, " ")}
-                          </span>
-                        </button>
-                      );
-                    })}
-                  {neighborCount === 0 && (
-                    <p className="px-3 py-2 text-xs font-mono text-muted-foreground">
-                      no linked nodes yet.
-                    </p>
-                  )}
-                </div>
-              </div>
-            </div>
+        {detailNode && (
+          <aside
+            className={cn(
+              "shrink-0 z-20 transition-all duration-150",
+              selectedId ? "w-96 border-l border-border" : "absolute right-4 top-4 w-80 pointer-events-auto"
+            )}
+          >
+            <MemoryNodeDetail
+              node={detailNode}
+              graph={graph}
+              pinned={!!selectedId}
+              onClose={() => setSelectedId(null)}
+              onNavigate={(id) => handleSelect(id)}
+            />
           </aside>
         )}
       </div>

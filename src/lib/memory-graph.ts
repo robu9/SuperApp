@@ -11,48 +11,61 @@ export function linkEndpointId(endpoint: string | GraphNode): string {
   return typeof endpoint === "string" ? endpoint : endpoint.id;
 }
 
-export function addHeuristicLinks(graph: MemoryGraphData): MemoryGraphData {
-  const links = [...graph.links];
-  const keys = new Set(links.map((l) => linkKey(linkEndpointId(l.source), linkEndpointId(l.target), l.relation)));
+export function pruneGraphLinks(
+  graph: MemoryGraphData,
+  maxPerNode = 3
+): MemoryGraphData {
+  const degree = new Map<string, number>();
+  const kept: GraphLink[] = [];
+  const seen = new Set<string>();
 
-  const addLink = (from: string, to: string, relation: string) => {
-    if (from === to) return;
-    const key = linkKey(from, to, relation);
-    if (keys.has(key)) return;
-    keys.add(key);
-    links.push({ source: from, target: to, relation });
-  };
+  const relationScore = (relation: string) =>
+    relation === "related_to" ? 3 : relation === "follows" ? 2 : 1;
 
-  for (let i = 0; i < graph.nodes.length; i++) {
-    for (let j = i + 1; j < graph.nodes.length; j++) {
-      const a = graph.nodes[i].memory;
-      const b = graph.nodes[j].memory;
+  const sorted = [...graph.links].sort(
+    (a, b) => relationScore(b.relation) - relationScore(a.relation)
+  );
 
-      if (a.app_name && a.app_name === b.app_name) {
-        addLink(a.id, b.id, "captured_in");
-      }
+  for (const link of sorted) {
+    const source = linkEndpointId(link.source);
+    const target = linkEndpointId(link.target);
+    const key = linkKey(source, target, link.relation);
+    if (seen.has(key)) continue;
 
-      if (a.window_name && a.window_name === b.window_name) {
-        addLink(a.id, b.id, "mentions");
-      }
-    }
+    const sourceDegree = degree.get(source) ?? 0;
+    const targetDegree = degree.get(target) ?? 0;
+    if (sourceDegree >= maxPerNode || targetDegree >= maxPerNode) continue;
+
+    seen.add(key);
+    kept.push({ source, target, relation: link.relation });
+    degree.set(source, sourceDegree + 1);
+    degree.set(target, targetDegree + 1);
   }
 
-  if (links.length === 0 && graph.nodes.length >= 2) {
-    const sorted = [...graph.nodes].sort(
-      (a, b) =>
-        new Date(a.memory.created_at).getTime() - new Date(b.memory.created_at).getTime()
-    );
+  return { nodes: graph.nodes, links: kept };
+}
 
-    for (let i = 0; i < sorted.length - 1; i++) {
-      addLink(sorted[i].id, sorted[i + 1].id, "follows");
-    }
+export function addHeuristicLinks(graph: MemoryGraphData): MemoryGraphData {
+  if (graph.links.length > 0) {
+    return pruneGraphLinks(graph);
+  }
 
-    for (let i = 0; i < sorted.length; i++) {
-      for (let j = i + 2; j < Math.min(i + 4, sorted.length); j++) {
-        addLink(sorted[i].id, sorted[j].id, "related_to");
-      }
-    }
+  if (graph.nodes.length < 2) {
+    return graph;
+  }
+
+  const links: GraphLink[] = [];
+  const sorted = [...graph.nodes].sort(
+    (a, b) =>
+      new Date(a.memory.created_at).getTime() - new Date(b.memory.created_at).getTime()
+  );
+
+  for (let i = 0; i < sorted.length - 1; i++) {
+    links.push({
+      source: sorted[i].id,
+      target: sorted[i + 1].id,
+      relation: "follows",
+    });
   }
 
   return { nodes: graph.nodes, links };
@@ -130,7 +143,7 @@ export async function expandGraphForMemories(
 }
 
 export function finalizeGraph(graph: MemoryGraphData): MemoryGraphData {
-  return addHeuristicLinks(graph);
+  return pruneGraphLinks(addHeuristicLinks(graph));
 }
 
 export function filterGraphHighlight(

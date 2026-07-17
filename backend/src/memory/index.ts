@@ -250,7 +250,7 @@ export async function getNodeGraph(
     const response = await client.search.memories({
       q: node.content.slice(0, 200) || node.title || id,
       containerTag: SUPERMEMORY_CONTAINER_TAG,
-      limit: 8,
+      limit: 5,
     });
 
     const match =

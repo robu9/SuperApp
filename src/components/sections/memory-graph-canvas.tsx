@@ -1,10 +1,12 @@
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ForceGraph2D, {
   type ForceGraphMethods,
+  type LinkObject,
   type NodeObject,
 } from "react-force-graph-2d";
 import type { MemoryNode } from "@/lib/api/client";
 import { linkEndpointId } from "@/lib/memory-graph";
+import { getFocusSet, isLinkFocused } from "@/lib/memory-graph-layout";
 import { useTheme } from "@/components/theme-provider";
 
 export interface GraphLink {
@@ -29,9 +31,9 @@ export interface MemoryGraphData {
 interface MemoryGraphCanvasProps {
   data: MemoryGraphData;
   selectedId: string | null;
-  highlightIds: Set<string>;
+  hoverId: string | null;
+  onHover: (id: string | null) => void;
   onSelect: (id: string | null) => void;
-  onNodeDragEnd?: (node: GraphNode) => void;
 }
 
 function nodeLabel(node: MemoryNode): string {
@@ -63,14 +65,17 @@ export function memoryNodeToGraphNode(memory: MemoryNode): GraphNode {
 export function MemoryGraphCanvas({
   data,
   selectedId,
-  highlightIds,
+  hoverId,
+  onHover,
   onSelect,
-  onNodeDragEnd,
 }: MemoryGraphCanvasProps) {
   const containerRef = useRef<HTMLDivElement>(null);
   const graphRef = useRef<ForceGraphMethods<GraphNode, GraphLink>>();
   const { isDark } = useTheme();
   const [size, setSize] = React.useState({ width: 800, height: 600 });
+
+  const activeId = selectedId ?? hoverId;
+  const focus = useMemo(() => getFocusSet(data, activeId), [data, activeId]);
 
   const palette = useMemo(
     () => ({
@@ -100,45 +105,54 @@ export function MemoryGraphCanvas({
     return () => observer.disconnect();
   }, []);
 
-  const graphData = useMemo(
-    () => ({
+  const graphData = useMemo(() => {
+    const nodeIds = new Set(data.nodes.map((n) => n.id));
+    return {
       nodes: data.nodes.map((n) => ({ ...n })),
-      links: data.links.map((l) => ({
-        source: linkEndpointId(l.source),
-        target: linkEndpointId(l.target),
-        relation: l.relation,
-      })),
-    }),
-    [data]
-  );
+      links: data.links
+        .map((l) => ({
+          source: linkEndpointId(l.source),
+          target: linkEndpointId(l.target),
+          relation: l.relation,
+        }))
+        .filter((l) => nodeIds.has(l.source) && nodeIds.has(l.target)),
+    };
+  }, [data]);
+
+  useEffect(() => {
+    const fg = graphRef.current;
+    if (!fg) return;
+    fg.d3Force("link")?.distance(90);
+    fg.d3Force("charge")?.strength(-140);
+  }, [graphData]);
 
   useEffect(() => {
     if (!selectedId || !graphRef.current) return;
     const node = graphData.nodes.find((n) => n.id === selectedId);
     if (!node || node.x == null || node.y == null) return;
     graphRef.current.centerAt(node.x, node.y, 400);
-    graphRef.current.zoom(2.2, 400);
+    graphRef.current.zoom(1.8, 400);
   }, [selectedId, graphData.nodes]);
 
   const paintNode = useCallback(
     (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const isSelected = node.id === selectedId;
-      const isHighlighted =
-        highlightIds.size === 0 || highlightIds.has(node.id);
+      const inFocus = !activeId || focus.has(node.id);
+      const isActive = activeId === node.id;
       const radius = node.val ?? 8;
       const x = node.x ?? 0;
       const y = node.y ?? 0;
 
+      ctx.globalAlpha = inFocus ? 1 : 0.18;
       ctx.beginPath();
       ctx.arc(x, y, radius, 0, 2 * Math.PI);
 
-      if (isSelected) {
+      if (isActive) {
         ctx.fillStyle = palette.foreground;
         ctx.fill();
         ctx.lineWidth = 2 / globalScale;
         ctx.strokeStyle = palette.foreground;
         ctx.stroke();
-      } else if (isHighlighted) {
+      } else if (inFocus) {
         ctx.fillStyle = palette.background;
         ctx.fill();
         ctx.lineWidth = 1.5 / globalScale;
@@ -152,38 +166,64 @@ export function MemoryGraphCanvas({
         ctx.stroke();
       }
 
-      if (globalScale > 0.65 && isHighlighted) {
+      if (globalScale > 0.55 && isActive) {
         const fontSize = Math.max(10 / globalScale, 3);
         ctx.font = `${fontSize}px "JetBrains Mono", monospace`;
         ctx.textAlign = "center";
         ctx.textBaseline = "top";
-        ctx.fillStyle = isSelected ? palette.background : palette.foreground;
+        ctx.fillStyle = isActive ? palette.background : palette.foreground;
         const text = node.label.length > 28 ? `${node.label.slice(0, 26)}…` : node.label;
         ctx.fillText(text, x, y + radius + 2 / globalScale);
       }
+      ctx.globalAlpha = 1;
     },
-    [highlightIds, palette, selectedId]
+    [activeId, focus, palette]
+  );
+
+  const linkColor = useCallback(
+    (link: LinkObject<GraphNode, GraphLink>) => {
+      const focused = isLinkFocused(link as GraphLink, focus);
+      if (!activeId) return palette.muted;
+      return focused ? palette.foreground : `${palette.border}`;
+    },
+    [activeId, focus, palette]
+  );
+
+  const linkWidth = useCallback(
+    (link: LinkObject<GraphNode, GraphLink>) => {
+      const focused = isLinkFocused(link as GraphLink, focus);
+      if (!activeId) return 1;
+      return focused ? 1.8 : 0.4;
+    },
+    [activeId, focus]
   );
 
   return (
-    <div ref={containerRef} className="w-full h-full min-h-0 bg-background">
+    <div ref={containerRef} className="relative w-full h-full min-h-0 bg-background overflow-hidden">
+      <div
+        className="absolute inset-0 opacity-[0.35] pointer-events-none"
+        style={{
+          backgroundImage:
+            "linear-gradient(hsl(var(--border) / 0.35) 1px, transparent 1px), linear-gradient(90deg, hsl(var(--border) / 0.35) 1px, transparent 1px)",
+          backgroundSize: "24px 24px",
+        }}
+      />
       <ForceGraph2D
         ref={graphRef}
         width={size.width}
         height={size.height}
         graphData={graphData}
-        backgroundColor={palette.background}
-        linkColor={() => palette.muted}
-        linkWidth={1.2}
-        linkDirectionalArrowLength={3.5}
+        backgroundColor="transparent"
+        linkColor={linkColor}
+        linkWidth={linkWidth}
+        linkDirectionalArrowLength={3}
         linkDirectionalArrowRelPos={1}
-        linkDirectionalParticles={2}
-        linkDirectionalParticleWidth={2}
-        linkDirectionalParticleSpeed={0.004}
         linkLabel={(link) =>
-          (link as GraphLink).relation.replace(/_/g, " ")
+          activeId && isLinkFocused(link as GraphLink, focus)
+            ? (link as GraphLink).relation.replace(/_/g, " ")
+            : ""
         }
-        cooldownTicks={120}
+        cooldownTicks={150}
         d3AlphaDecay={0.02}
         d3VelocityDecay={0.3}
         nodeCanvasObject={paintNode}
@@ -199,8 +239,8 @@ export function MemoryGraphCanvas({
           const n = node as GraphNode;
           onSelect(n.id === selectedId ? null : n.id);
         }}
+        onNodeHover={(node) => onHover(node ? (node as GraphNode).id : null)}
         onBackgroundClick={() => onSelect(null)}
-        onNodeDragEnd={(node) => onNodeDragEnd?.(node as GraphNode)}
       />
     </div>
   );

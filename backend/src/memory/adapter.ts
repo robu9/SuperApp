@@ -115,12 +115,16 @@ export function buildGraphFromSearchResult(
     });
   };
 
-  for (const item of allResults) {
-    if (item.id === node.id) continue;
+  for (const item of allResults
+    .filter((candidate) => candidate.id !== node.id)
+    .sort((a, b) => (b.similarity ?? 0) - (a.similarity ?? 0))
+    .slice(0, 2)) {
+    const similarity = item.similarity ?? 0;
+    if (similarity < 0.35 && edges.length > 0) continue;
     addEdge(
       searchResultToMemoryNode(item),
       "related_to",
-      typeof item.similarity === "number" ? item.similarity : 0.5
+      similarity || 0.5
     );
   }
 
