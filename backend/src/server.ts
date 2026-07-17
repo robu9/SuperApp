@@ -1,7 +1,9 @@
 import { readFileSync, existsSync } from "fs";
+import type { Server as HttpServer } from "http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
+import { WebSocketServer } from "ws";
 import { API_HOST, API_PORT, AUDIO_ENABLED, AUTO_START_CAPTURE, DATA_DIR, GEMINI_MODEL, OCR_ENABLED } from "./config.js";
 import { captureEngine } from "./capture/engine.js";
 import {
