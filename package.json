@@ -119,6 +119,10 @@
       "icon": "icon.png",
       "category": "public.app-category.productivity",
       "hardenedRuntime": true,
+      "extendInfo": {
+        "NSMicrophoneUsageDescription": "SuperApp records microphone audio when you start meeting notes.",
+        "NSAudioCaptureUsageDescription": "SuperApp records meeting playback so every participant can be transcribed."
+      },
       "entitlements": "build/entitlements.mac.plist",
       "entitlementsInherit": "build/entitlements.mac.plist",
       "notarize": true

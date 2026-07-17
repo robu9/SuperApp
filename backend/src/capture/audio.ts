@@ -12,6 +12,7 @@ import {
 } from "../db/meetings.js";
 import { transcribeChunk as transcribeChunkAudio } from "./stt.js";
 import { resolvePackagedExecutable } from "./executable-path.js";
+import { ensureMacSystemAudioBinary } from "./system-audio-macos.js";
 import type { AudioDeviceInfo } from "../types.js";
 
 const execFileAsync = promisify(execFile);
@@ -20,8 +21,9 @@ const FFMPEG = resolvePackagedExecutable(ffmpegInstaller.path);
 class AudioRecorder {
   private recording = false;
   private loopRunning = false;
-  private currentProcess: ChildProcess | null = null;
+  private currentProcesses = new Set<ChildProcess>();
   private inputDevice: string | null = null;
+  private outputMonitorDevice: string | null = null;
   private chunkIndex = 0;
   private currentMeetingId: number | null = null;
 
@@ -32,13 +34,20 @@ class AudioRecorder {
   async start(): Promise<void> {
     if (!AUDIO_ENABLED || this.recording) return;
 
+    if (process.platform === "darwin") {
+      // Compile/resolve before the meeting clock starts so the first chunk does
+      // not silently lose audio while the native helper is being prepared.
+      await ensureMacSystemAudioBinary();
+    }
     this.inputDevice = await resolveInputDevice();
+    this.outputMonitorDevice =
+      process.platform === "linux" ? await resolveLinuxMonitorDevice() : null;
     this.recording = true;
     this.chunkIndex = 0;
     closeOrphanOpenMeetings();
     this.currentMeetingId = createMeeting(new Date().toISOString());
     console.log(
-      `[audio] recording started (device: ${this.inputDevice ?? "default"}, chunk ${AUDIO_CHUNK_SEC}s)`
+      `[audio] recording started (microphone: ${this.inputDevice ?? "default"}, system: ${this.outputMonitorDevice ?? (process.platform === "darwin" ? "ScreenCaptureKit" : "unavailable")}, chunk ${AUDIO_CHUNK_SEC}s)`
     );
 
     if (!this.loopRunning) {
@@ -49,10 +58,10 @@ class AudioRecorder {
 
   stop(): void {
     this.recording = false;
-    if (this.currentProcess) {
-      this.currentProcess.kill("SIGTERM");
-      this.currentProcess = null;
+    for (const process of this.currentProcesses) {
+      process.kill("SIGTERM");
     }
+    this.currentProcesses.clear();
     if (this.currentMeetingId !== null) {
       closeMeeting(this.currentMeetingId, new Date().toISOString());
       this.currentMeetingId = null;
@@ -77,28 +86,23 @@ class AudioRecorder {
 
     const filename = `audio_${Date.now()}_c${this.chunkIndex++}.wav`;
     const filePath = path.join(AUDIO_DIR, filename);
-    const args = buildRecordArgs(this.inputDevice, filePath, AUDIO_CHUNK_SEC);
     // Capture before recording: transcription may finish after stop()
     const meetingId = this.currentMeetingId;
-
-    await new Promise<void>((resolve, reject) => {
-      const proc = spawn(FFMPEG, args, { stdio: ["ignore", "ignore", "pipe"] });
-      this.currentProcess = proc;
-
-      let stderr = "";
-      proc.stderr?.on("data", (chunk: Buffer) => {
-        stderr += chunk.toString();
-      });
-
-      proc.on("error", reject);
-      proc.on("close", (code) => {
-        this.currentProcess = null;
-        if (code !== 0 && code !== null) {
-          console.warn(`[audio] ffmpeg exited ${code}: ${stderr.slice(-300)}`);
-        }
-        resolve();
-      });
-    });
+    let systemAudioIncluded = false;
+    if (process.platform === "darwin") {
+      systemAudioIncluded = await this.recordMacMixedChunk(filePath);
+    } else if (process.platform === "linux" && this.outputMonitorDevice) {
+      systemAudioIncluded = await this.recordLinuxMixedChunk(
+        filePath,
+        this.outputMonitorDevice
+      );
+    } else {
+      await this.runProcess(
+        FFMPEG,
+        buildRecordArgs(this.inputDevice, filePath, AUDIO_CHUNK_SEC),
+        "microphone"
+      );
+    }
 
     if (!this.recording || !fs.existsSync(filePath)) return;
 
@@ -108,13 +112,184 @@ class AudioRecorder {
       return;
     }
 
-    void this.transcribeChunk(filePath, filename, meetingId);
+    void this.transcribeChunk(
+      filePath,
+      filename,
+      meetingId,
+      systemAudioIncluded
+        ? "microphone + system audio"
+        : this.inputDevice ?? "default microphone"
+    );
+  }
+
+  private async recordMacMixedChunk(outputPath: string): Promise<boolean> {
+    const helper = await ensureMacSystemAudioBinary();
+    if (!helper) {
+      await this.runProcess(
+        FFMPEG,
+        buildRecordArgs(this.inputDevice, outputPath, AUDIO_CHUNK_SEC),
+        "microphone"
+      );
+      return false;
+    }
+
+    const stem = outputPath.replace(/\.wav$/i, "");
+    const micPath = `${stem}.mic.wav`;
+    const systemPath = `${stem}.system.wav`;
+
+    try {
+      const [micOk, systemOk] = await Promise.all([
+        this.runProcess(
+          FFMPEG,
+          buildRecordArgs(this.inputDevice, micPath, AUDIO_CHUNK_SEC),
+          "microphone"
+        ),
+        this.runProcess(
+          helper,
+          [systemPath, String(AUDIO_CHUNK_SEC)],
+          "system audio"
+        ),
+      ]);
+
+      if (!this.recording) return false;
+      return await this.combineCapturedAudio(
+        outputPath,
+        micPath,
+        systemPath,
+        micOk,
+        systemOk
+      );
+    } finally {
+      fs.rmSync(micPath, { force: true });
+      fs.rmSync(systemPath, { force: true });
+    }
+  }
+
+  private async recordLinuxMixedChunk(
+    outputPath: string,
+    monitorDevice: string
+  ): Promise<boolean> {
+    const stem = outputPath.replace(/\.wav$/i, "");
+    const micPath = `${stem}.mic.wav`;
+    const systemPath = `${stem}.system.wav`;
+
+    try {
+      const [micOk, systemOk] = await Promise.all([
+        this.runProcess(
+          FFMPEG,
+          buildRecordArgs(this.inputDevice, micPath, AUDIO_CHUNK_SEC),
+          "microphone"
+        ),
+        this.runProcess(
+          FFMPEG,
+          buildPulseRecordArgs(monitorDevice, systemPath, AUDIO_CHUNK_SEC, 2, 48_000),
+          "system audio"
+        ),
+      ]);
+
+      if (!this.recording) return false;
+      return await this.combineCapturedAudio(
+        outputPath,
+        micPath,
+        systemPath,
+        micOk,
+        systemOk
+      );
+    } finally {
+      fs.rmSync(micPath, { force: true });
+      fs.rmSync(systemPath, { force: true });
+    }
+  }
+
+  private async combineCapturedAudio(
+    outputPath: string,
+    micPath: string,
+    systemPath: string,
+    micOk: boolean,
+    systemOk: boolean
+  ): Promise<boolean> {
+    const hasMic = micOk && isUsableAudioFile(micPath);
+    const hasSystem = systemOk && isUsableAudioFile(systemPath);
+
+    if (hasMic && hasSystem) {
+      const mixed = await this.runProcess(
+        FFMPEG,
+        [
+          "-i",
+          micPath,
+          "-i",
+          systemPath,
+          "-filter_complex",
+          "[0:a][1:a]amix=inputs=2:duration=longest:normalize=0,alimiter=limit=0.95[a]",
+          "-map",
+          "[a]",
+          "-ac",
+          "1",
+          "-ar",
+          "16000",
+          "-y",
+          outputPath,
+        ],
+        "audio mixer"
+      );
+      if (mixed && isUsableAudioFile(outputPath)) return true;
+    }
+
+    if (hasSystem && !hasMic) {
+      const converted = await this.runProcess(
+        FFMPEG,
+        ["-i", systemPath, "-vn", "-ac", "1", "-ar", "16000", "-y", outputPath],
+        "system audio converter"
+      );
+      return converted && isUsableAudioFile(outputPath);
+    }
+
+    if (hasMic) {
+      fs.renameSync(micPath, outputPath);
+    }
+    return false;
+  }
+
+  private runProcess(
+    command: string,
+    args: string[],
+    label: string
+  ): Promise<boolean> {
+    return new Promise((resolve) => {
+      const proc = spawn(command, args, { stdio: ["ignore", "ignore", "pipe"] });
+      this.currentProcesses.add(proc);
+      let stderr = "";
+      let settled = false;
+
+      proc.stderr?.on("data", (chunk: Buffer) => {
+        stderr += chunk.toString();
+      });
+      proc.on("error", (err) => {
+        if (settled) return;
+        settled = true;
+        this.currentProcesses.delete(proc);
+        console.warn(`[audio] ${label} failed: ${err.message}`);
+        resolve(false);
+      });
+      proc.on("close", (code) => {
+        if (settled) return;
+        settled = true;
+        this.currentProcesses.delete(proc);
+        if (code !== 0) {
+          console.warn(
+            `[audio] ${label} exited ${code ?? "by signal"}: ${stderr.slice(-500)}`
+          );
+        }
+        resolve(code === 0);
+      });
+    });
   }
 
   private async transcribeChunk(
     filePath: string,
     filename: string,
-    meetingId: number | null
+    meetingId: number | null,
+    deviceName: string
   ): Promise<void> {
     try {
       const text = await transcribeChunkAudio(filePath);
@@ -134,7 +309,7 @@ class AudioRecorder {
         timestamp: new Date().toISOString(),
         transcription: cleaned,
         filePath,
-        deviceName: this.inputDevice ?? "default",
+        deviceName,
         durationSecs: AUDIO_CHUNK_SEC,
         meetingId,
       });
@@ -143,6 +318,14 @@ class AudioRecorder {
     } catch (err) {
       console.error(`[audio] transcription failed for ${filename}:`, err);
     }
+  }
+}
+
+function isUsableAudioFile(filePath: string): boolean {
+  try {
+    return fs.statSync(filePath).size >= 1000;
+  } catch {
+    return false;
   }
 }
 
@@ -249,6 +432,54 @@ async function resolveInputDevice(): Promise<string | null> {
   return "default";
 }
 
+async function resolveLinuxMonitorDevice(): Promise<string | null> {
+  if (process.platform !== "linux") return null;
+
+  try {
+    let defaultSink = "";
+    try {
+      const { stdout } = await execFileAsync("pactl", ["get-default-sink"], {
+        timeout: 5000,
+      });
+      defaultSink = stdout.trim();
+    } catch {
+      const { stdout } = await execFileAsync("pactl", ["info"], {
+        timeout: 5000,
+      });
+      defaultSink =
+        stdout.match(/^Default Sink:\s*(.+)$/m)?.[1]?.trim() ?? "";
+    }
+
+    const { stdout: sourcesOutput } = await execFileAsync(
+      "pactl",
+      ["list", "short", "sources"],
+      { timeout: 5000 }
+    );
+    const sourceNames = sourcesOutput
+      .split(/\r?\n/)
+      .map((line) => line.split(/\s+/)[1])
+      .filter((name): name is string => Boolean(name));
+
+    const exactMonitor = defaultSink ? `${defaultSink}.monitor` : null;
+    if (exactMonitor && sourceNames.includes(exactMonitor)) return exactMonitor;
+
+    const matchingMonitor = defaultSink
+      ? sourceNames.find(
+          (name) => name.endsWith(".monitor") && name.includes(defaultSink)
+        )
+      : null;
+    return matchingMonitor ?? sourceNames.find((name) => name.endsWith(".monitor")) ?? null;
+  } catch (err) {
+    console.warn(
+      "[system-audio] could not inspect PulseAudio/PipeWire monitor sources; trying the default monitor:",
+      err instanceof Error ? err.message : err
+    );
+    // PulseAudio and PipeWire's PulseAudio compatibility layer resolve this
+    // symbolic source when supported. If not, the mic recording still wins.
+    return "@DEFAULT_MONITOR@";
+  }
+}
+
 function buildRecordArgs(
   device: string | null,
   outputPath: string,
@@ -264,6 +495,29 @@ function buildRecordArgs(
     return ["-f", "avfoundation", "-i", device ?? ":0", ...common];
   }
   return ["-f", "pulse", "-i", device ?? "default", ...common];
+}
+
+function buildPulseRecordArgs(
+  device: string,
+  outputPath: string,
+  durationSec: number,
+  channels: 1 | 2,
+  sampleRate: number
+): string[] {
+  return [
+    "-f",
+    "pulse",
+    "-i",
+    device,
+    "-t",
+    String(durationSec),
+    "-ac",
+    String(channels),
+    "-ar",
+    String(sampleRate),
+    "-y",
+    outputPath,
+  ];
 }
 
 function sleep(ms: number): Promise<void> {

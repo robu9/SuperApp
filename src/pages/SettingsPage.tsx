@@ -244,7 +244,7 @@ function RecordingSection() {
           onChange={(on) => void (on ? resumeAll() : pauseAll())}
         />
       </SettingRow>
-      <SettingRow label="Microphone" description="Record meeting audio and transcribe">
+      <SettingRow label="Meeting audio" description="Record microphone and meeting playback">
         <Toggle
           checked={meetingActive}
           disabled={!isConnected}

@@ -153,7 +153,7 @@ export function MeetingsSection() {
     <div className="flex flex-col h-full min-h-0 min-w-0">
       <div className="page-header">
         <h1 className="page-header-title">Meetings</h1>
-        <p className="page-header-desc">Transcripts and notes from recorded audio sessions</p>
+        <p className="page-header-desc">Transcripts from your microphone and meeting playback</p>
       </div>
       <div className="flex flex-1 min-h-0 min-w-0">
         <div className="w-72 border-r border-border overflow-y-auto scrollbar-hide shrink-0 bg-surface">
