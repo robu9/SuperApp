@@ -77,15 +77,13 @@ port is already occupied.
 ### Publishing
 
 Pushing a `v*` tag runs `.github/workflows/release.yml`, which validates the app
-and site, builds a notarized universal DMG and x64 AppImage, creates SHA-256
-checksums, and publishes them to GitHub Releases. The macOS job requires these
-repository secrets:
+and site, builds an unsigned universal DMG and x64 AppImage, creates SHA-256
+checksums, and publishes them to GitHub Releases. This makes both landing-page
+downloads work without requiring release secrets. macOS users must use Open
+Anyway until Apple Developer signing and notarization are enabled for a future
+production release.
 
-- `MAC_CSC_LINK` and `MAC_CSC_KEY_PASSWORD`
-- `APPLE_API_KEY`, `APPLE_API_KEY_ID`, and `APPLE_API_ISSUER`
-- `APPLE_TEAM_ID`
-
-Unsigned local macOS packaging can be tested with
+Unsigned local macOS packaging can also be tested with
 `CSC_IDENTITY_AUTO_DISCOVERY=false npm run build:mac`.
 
 The Vercel project uses the root `vercel.json`, builds `site/`, and links its
