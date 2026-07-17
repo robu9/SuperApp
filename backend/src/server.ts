@@ -2,6 +2,8 @@ import { readFileSync, existsSync } from "fs";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
+import type { Server as HttpServer } from "http";
+import { WebSocketServer } from "ws";
 import { API_HOST, API_PORT, AUDIO_ENABLED, AUTO_START_CAPTURE, DATA_DIR, GEMINI_MODEL, OCR_ENABLED, STT_ENGINE } from "./config.js";
 import { captureEngine } from "./capture/engine.js";
 import {
@@ -19,7 +21,6 @@ import {
   getFrameById,
   getFrameText,
   getVideoChunkPath,
-  getRecentContext,
   getStats,
   initDatabase,
   keywordSearch,
@@ -42,6 +43,8 @@ import {
   summarizeMeeting,
   type ChatTurn,
 } from "./llm/gemini.js";
+import { buildChatContext } from "./chat/context.js";
+import { attachLiveChatSocket } from "./chat/live-socket.js";
 import { COMPOSIO_ENABLED } from "./connectors/config.js";
 import {
   connectionStatus,
@@ -60,7 +63,6 @@ import {
   ingestUserMemory,
   initSupermemory,
   listNodes,
-  retrieveContextForChat,
 } from "./memory/index.js";
 import {
   getRunningPipes,
@@ -496,61 +498,13 @@ app.post("/chat", async (c) => {
       return c.json({ error: "messages array is required" }, 400);
     }
 
-    const stats = getStats();
-    const engine = captureEngine.state;
-
     const lastUserMessage = [...body.messages]
       .reverse()
       .find((message) => message.role === "user")?.content;
 
     const searchQuery = body.context_query ?? lastUserMessage ?? "";
-    const CONTEXT_BUDGET = 24_000;
-
-    const { snippets: memorySnippets } = await retrieveContextForChat(
-      searchQuery,
-      CONTEXT_BUDGET
-    );
-
-    const contextSnippets = [...memorySnippets];
-
-    if (contextSnippets.length === 0) {
-      const recent = getRecentContext(8);
-      for (const item of recent) {
-        const sourceLabel = item.source === "audio" ? "[audio]" : "[screen]";
-        const parts = [
-          sourceLabel,
-          item.app_name ? `[${item.app_name}]` : null,
-          item.window_name ? `"${item.window_name}"` : null,
-          item.text.slice(0, 1500),
-        ].filter(Boolean);
-        contextSnippets.push(parts.join(" "));
-      }
-    }
-
-    if (searchQuery.trim().length > 2) {
-      const { data } = searchContent({
-        q: searchQuery,
-        limit: 4,
-        offset: 0,
-        contentType: "all",
-      });
-      const searchSnippets = data
-        .map((item) => item.content.text?.slice(0, 800))
-        .filter(Boolean) as string[];
-      for (const snippet of searchSnippets) {
-        if (!contextSnippets.includes(snippet)) {
-          contextSnippets.push(snippet);
-        }
-      }
-    }
-
-    let budget = 0;
-    const boundedSnippets: string[] = [];
-    for (const snippet of contextSnippets) {
-      if (budget + snippet.length > CONTEXT_BUDGET) break;
-      budget += snippet.length;
-      boundedSnippets.push(snippet);
-    }
+    const { snippets: boundedSnippets, recording } =
+      await buildChatContext(searchQuery);
 
     // Load connector tools for any actively-connected toolkits so the model can
     // read/act in Gmail, Calendar, Slack, Notion. No-op when Composio is unset.
@@ -570,12 +524,7 @@ app.post("/chat", async (c) => {
     const content = await generateGeminiReply(
       body.messages,
       boundedSnippets,
-      {
-        screenRecording: engine.running && !engine.paused,
-        framesCaptured: stats.framesCaptured,
-        audioRecording: isAudioRecording(),
-        audioChunks: stats.audioChunks,
-      },
+      recording,
       tools.length > 0
         ? {
             tools,
@@ -799,8 +748,20 @@ export function startServer(): void {
     }
   }
 
-  serve({ fetch: app.fetch, hostname: API_HOST, port: API_PORT }, () => {
-    console.log(`[server] superapp api http://${API_HOST}:${API_PORT}`);
+  const server = serve(
+    { fetch: app.fetch, hostname: API_HOST, port: API_PORT },
+    () => {
+      console.log(`[server] superapp api http://${API_HOST}:${API_PORT}`);
+      console.log(`[server] live voice ws://${API_HOST}:${API_PORT}/chat/live`);
+    }
+  );
+
+  const wss = new WebSocketServer({
+    server: server as HttpServer,
+    path: "/chat/live",
+  });
+  wss.on("connection", (socket) => {
+    attachLiveChatSocket(socket);
   });
 }
 

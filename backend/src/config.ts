@@ -61,6 +61,11 @@ export const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
 export const GEMINI_MODEL =
   process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
+/** Native-audio model for live voice (BidiGenerateContent). */
+export const GEMINI_LIVE_MODEL =
+  process.env.GEMINI_LIVE_MODEL ?? "gemini-2.5-flash-native-audio-latest";
+export const GEMINI_LIVE_VOICE =
+  process.env.GEMINI_LIVE_VOICE ?? "Puck";
 
 /** Official Supermemory local server — see https://supermemory.ai/docs/self-hosting/overview */
 export const SUPERMEMORY_BASE_URL =

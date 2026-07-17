@@ -22,11 +22,17 @@ interface ChatState {
   sessions: Record<string, ChatSession>;
   currentId: string | null;
   isStreaming: boolean;
+  /** Gemini Live voice mode active */
+  isLiveVoice: boolean;
+  liveUserPartial: string;
+  liveAssistantPartial: string;
   actions: {
     setCurrent: (id: string) => void;
     createSession: () => string;
     addMessage: (sessionId: string, message: Omit<ChatMessage, "id" | "timestamp">) => void;
     setStreaming: (streaming: boolean) => void;
+    setLiveVoice: (active: boolean) => void;
+    setLivePartials: (user: string, assistant: string) => void;
     updateSessionTitle: (id: string, title: string) => void;
   };
 }
@@ -53,10 +59,13 @@ function createDefaultSession(): ChatSession {
 
 export const useChatStore = create<ChatState>()(
   persist(
-    (set, get) => ({
+    (set) => ({
       sessions: {},
       currentId: null,
       isStreaming: false,
+      isLiveVoice: false,
+      liveUserPartial: "",
+      liveAssistantPartial: "",
       actions: {
         setCurrent: (id) => set({ currentId: id }),
         createSession: () => {
@@ -93,6 +102,15 @@ export const useChatStore = create<ChatState>()(
           });
         },
         setStreaming: (streaming) => set({ isStreaming: streaming }),
+        setLiveVoice: (active) =>
+          set({
+            isLiveVoice: active,
+            ...(active
+              ? {}
+              : { liveUserPartial: "", liveAssistantPartial: "" }),
+          }),
+        setLivePartials: (user, assistant) =>
+          set({ liveUserPartial: user, liveAssistantPartial: assistant }),
         updateSessionTitle: (id, title) =>
           set((state) => ({
             sessions: {
@@ -151,4 +169,22 @@ export async function simulateAssistantReply(
   } finally {
     actions.setStreaming(false);
   }
+}
+
+/** Persist a completed live voice turn into the same chat history as typed chat. */
+export function commitLiveTurn(
+  sessionId: string,
+  user: string,
+  assistant: string
+): void {
+  const { actions } = useChatStore.getState();
+  const userText = user.trim();
+  const assistantText = assistant.trim();
+  if (userText) {
+    actions.addMessage(sessionId, { role: "user", content: userText });
+  }
+  if (assistantText) {
+    actions.addMessage(sessionId, { role: "assistant", content: assistantText });
+  }
+  actions.setLivePartials("", "");
 }

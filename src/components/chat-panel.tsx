@@ -1,14 +1,16 @@
 import React, { useEffect, useRef, useState } from "react";
-import { Send } from "lucide-react";
+import { Mic, MicOff, Send } from "lucide-react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { electron } from "@/lib/electron";
+import { LiveVoiceSession } from "@/lib/live-voice";
 import { cn } from "@/lib/utils";
 import {
   useChatStore,
   simulateAssistantReply,
+  commitLiveTurn,
   type ChatMessage,
 } from "@/lib/stores/chat-store";
 
@@ -106,22 +108,133 @@ export function ChatPanel({ className }: { className?: string }) {
   const currentId = useChatStore((s) => s.currentId);
   const sessions = useChatStore((s) => s.sessions);
   const isStreaming = useChatStore((s) => s.isStreaming);
-  const { addMessage } = useChatStore((s) => s.actions);
+  const isLiveVoice = useChatStore((s) => s.isLiveVoice);
+  const liveUserPartial = useChatStore((s) => s.liveUserPartial);
+  const liveAssistantPartial = useChatStore((s) => s.liveAssistantPartial);
+  const { addMessage, setLiveVoice, setLivePartials } = useChatStore((s) => s.actions);
   const [input, setInput] = useState("");
+  const [liveError, setLiveError] = useState<string | null>(null);
+  const [liveConnecting, setLiveConnecting] = useState(false);
   const bottomRef = useRef<HTMLDivElement>(null);
+  const liveRef = useRef<LiveVoiceSession | null>(null);
 
   const session = currentId ? sessions[currentId] : null;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth" });
-  }, [session?.messages.length, isStreaming]);
+  }, [
+    session?.messages.length,
+    isStreaming,
+    isLiveVoice,
+    liveUserPartial,
+    liveAssistantPartial,
+  ]);
+
+  useEffect(() => {
+    return () => {
+      liveRef.current?.stop();
+      liveRef.current = null;
+    };
+  }, []);
 
   const handleSend = async () => {
     const text = input.trim();
-    if (!text || !currentId || isStreaming) return;
+    if (!text || !currentId || isStreaming || isLiveVoice) return;
     setInput("");
     addMessage(currentId, { role: "user", content: text });
     await simulateAssistantReply(currentId, text);
+  };
+
+  const stopLive = () => {
+    liveRef.current?.stop();
+    liveRef.current = null;
+    setLiveVoice(false);
+    setLiveConnecting(false);
+    setLivePartials("", "");
+  };
+
+  const toggleLive = async () => {
+    if (!currentId) return;
+
+    if (isLiveVoice || liveConnecting) {
+      stopLive();
+      return;
+    }
+
+    setLiveError(null);
+    setLiveConnecting(true);
+
+    if (electron?.permissions?.request) {
+      try {
+        await electron.permissions.request("microphone");
+      } catch {
+        // continue — getUserMedia will surface the real failure
+      }
+    }
+
+    const history =
+      session?.messages
+        .filter((message) => message.id !== "welcome")
+        .map((message) => ({
+          role: message.role,
+          content: message.content,
+        })) ?? [];
+
+    const sessionId = currentId;
+    const live = new LiveVoiceSession({
+      onReady: () => {
+        setLiveConnecting(false);
+        setLiveVoice(true);
+      },
+      onUserTranscript: (text) => {
+        const { liveAssistantPartial: assistantPartial } =
+          useChatStore.getState();
+        setLivePartials(text, assistantPartial);
+      },
+      onAssistantTranscript: (text) => {
+        const { liveUserPartial: userPartial } = useChatStore.getState();
+        setLivePartials(userPartial, text);
+      },
+      onTurnComplete: (user, assistant) => {
+        commitLiveTurn(sessionId, user, assistant);
+      },
+      onInterrupted: () => {
+        const { liveUserPartial: userPartial } = useChatStore.getState();
+        setLivePartials(userPartial, "");
+      },
+      onError: (message) => {
+        setLiveError(message);
+        stopLive();
+        addMessage(sessionId, {
+          role: "assistant",
+          content: `sorry, live voice failed.\n\n${message}`,
+        });
+      },
+      onClosed: () => {
+        liveRef.current = null;
+        setLiveVoice(false);
+        setLiveConnecting(false);
+        setLivePartials("", "");
+      },
+    });
+
+    liveRef.current = live;
+
+    try {
+      await live.start({
+        messages: history,
+        contextQuery: history.filter((m) => m.role === "user").at(-1)?.content,
+      });
+    } catch (err) {
+      const message =
+        err instanceof Error ? err.message : "failed to start live voice";
+      setLiveError(message);
+      stopLive();
+      addMessage(sessionId, {
+        role: "assistant",
+        content: `sorry, live voice failed.\n\n${message}`,
+      });
+    }
   };
 
   return (
@@ -143,6 +256,22 @@ export function ChatPanel({ className }: { className?: string }) {
           {session?.messages.map((msg) => (
             <MessageBlock key={msg.id} message={msg} />
           ))}
+          {isLiveVoice && liveUserPartial && (
+            <div className="flex flex-col gap-1.5 items-end opacity-70">
+              <span className="text-xs font-medium text-foreground">you (live)</span>
+              <div className="max-w-[85%] rounded-lg px-4 py-3 text-sm whitespace-pre-wrap bg-primary/80 text-primary-foreground">
+                {liveUserPartial}
+              </div>
+            </div>
+          )}
+          {isLiveVoice && liveAssistantPartial && (
+            <div className="flex flex-col gap-1.5 opacity-70">
+              <span className="text-xs font-medium text-foreground">assistant (live)</span>
+              <div className="max-w-[85%] rounded-lg border border-border bg-surface px-4 py-3 text-sm whitespace-pre-wrap">
+                {liveAssistantPartial}
+              </div>
+            </div>
+          )}
           {isStreaming && (
             <div className="flex items-center gap-2 text-sm text-muted-foreground">
               <span className="inline-flex gap-1">
@@ -152,6 +281,18 @@ export function ChatPanel({ className }: { className?: string }) {
               </span>
               Thinking…
             </div>
+          )}
+          {(isLiveVoice || liveConnecting) && !isStreaming && (
+            <div className="flex items-center gap-2 text-sm text-muted-foreground">
+              <span className="relative flex h-2 w-2">
+                <span className="absolute inline-flex h-full w-full animate-ping rounded-full bg-red-500/60" />
+                <span className="relative inline-flex h-2 w-2 rounded-full bg-red-500" />
+              </span>
+              {liveConnecting ? "Connecting live voice…" : "Listening — speak naturally"}
+            </div>
+          )}
+          {liveError && (
+            <p className="text-sm text-destructive">{liveError}</p>
           )}
           <div ref={bottomRef} />
         </div>
@@ -163,10 +304,30 @@ export function ChatPanel({ className }: { className?: string }) {
             value={input}
             onChange={(e) => setInput(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && !e.shiftKey && handleSend()}
-            placeholder="Ask anything…"
+            placeholder={isLiveVoice ? "Live voice active…" : "Ask anything…"}
             className="flex-1"
+            disabled={isLiveVoice || liveConnecting}
           />
-          <Button onClick={handleSend} disabled={!input.trim() || isStreaming} className="gap-2 shrink-0">
+          <Button
+            type="button"
+            variant={isLiveVoice || liveConnecting ? "destructive" : "outline"}
+            onClick={() => void toggleLive()}
+            disabled={isStreaming || !currentId}
+            className="shrink-0 gap-2"
+            title={isLiveVoice ? "Stop live voice" : "Start live voice"}
+          >
+            {isLiveVoice || liveConnecting ? (
+              <MicOff className="w-3.5 h-3.5" />
+            ) : (
+              <Mic className="w-3.5 h-3.5" />
+            )}
+            {isLiveVoice || liveConnecting ? "Stop" : "Voice"}
+          </Button>
+          <Button
+            onClick={handleSend}
+            disabled={!input.trim() || isStreaming || isLiveVoice || liveConnecting}
+            className="gap-2 shrink-0"
+          >
             Send
             <Send className="w-3.5 h-3.5" />
           </Button>

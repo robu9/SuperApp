@@ -45,10 +45,11 @@ interface GeminiResponse {
   error?: { message?: string };
 }
 
-function buildSystemInstruction(
+export function buildSystemInstruction(
   contextSnippets: string[],
   recording: RecordingStatus,
-  hasTools = false
+  hasTools = false,
+  options: { voice?: boolean } = {}
 ): string {
   const hasHistory = contextSnippets.length > 0;
   const statusLines = [
@@ -61,6 +62,9 @@ function buildSystemInstruction(
     "You are SuperApp, a helpful AI assistant inside a desktop app that records the user's screen and audio locally.",
     "Your context comes from SuperMemory — a local graph of screen captures, audio, meetings, tasks, and pinned memories.",
     "Answer clearly and concisely. Use lowercase, friendly tone unless the user prefers otherwise.",
+    options.voice
+      ? "You are in live voice mode. Keep spoken replies short and natural — a few sentences unless the user asks for detail. Do not read markdown or bullet markers aloud."
+      : "",
     "CRITICAL RULES:",
     "- SuperMemory history is provided in this conversation (not live video). You already have it.",
     "- NEVER say you can only answer if recording is enabled. NEVER offer to turn on recording when frames exist in the database or history snippets are provided.",
@@ -82,7 +86,7 @@ function buildSystemInstruction(
     .join("\n");
 }
 
-function toGeminiContents(
+export function toGeminiContents(
   messages: ChatTurn[],
   contextSnippets: string[] = []
 ): GeminiContent[] {
