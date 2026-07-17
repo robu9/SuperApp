@@ -1,15 +1,15 @@
 import React, { useCallback, useEffect, useMemo, useRef } from "react";
 import ForceGraph2D, {
   type ForceGraphMethods,
-  type LinkObject,
   type NodeObject,
 } from "react-force-graph-2d";
 import type { MemoryNode } from "@/lib/api/client";
+import { linkEndpointId } from "@/lib/memory-graph";
 import { useTheme } from "@/components/theme-provider";
 
 export interface GraphLink {
-  source: string;
-  target: string;
+  source: string | GraphNode;
+  target: string | GraphNode;
   relation: string;
 }
 
@@ -100,13 +100,25 @@ export function MemoryGraphCanvas({
     return () => observer.disconnect();
   }, []);
 
+  const graphData = useMemo(
+    () => ({
+      nodes: data.nodes.map((n) => ({ ...n })),
+      links: data.links.map((l) => ({
+        source: linkEndpointId(l.source),
+        target: linkEndpointId(l.target),
+        relation: l.relation,
+      })),
+    }),
+    [data]
+  );
+
   useEffect(() => {
     if (!selectedId || !graphRef.current) return;
-    const node = data.nodes.find((n) => n.id === selectedId);
+    const node = graphData.nodes.find((n) => n.id === selectedId);
     if (!node || node.x == null || node.y == null) return;
     graphRef.current.centerAt(node.x, node.y, 400);
     graphRef.current.zoom(2.2, 400);
-  }, [selectedId, data.nodes]);
+  }, [selectedId, graphData.nodes]);
 
   const paintNode = useCallback(
     (node: GraphNode, ctx: CanvasRenderingContext2D, globalScale: number) => {
@@ -153,45 +165,27 @@ export function MemoryGraphCanvas({
     [highlightIds, palette, selectedId]
   );
 
-  const paintLink = useCallback(
-    (link: LinkObject<GraphNode, GraphLink>, ctx: CanvasRenderingContext2D, globalScale: number) => {
-      const source = link.source as GraphNode;
-      const target = link.target as GraphNode;
-      if (source.x == null || source.y == null || target.x == null || target.y == null) return;
-
-      const isActive =
-        highlightIds.size === 0 ||
-        (highlightIds.has(source.id) && highlightIds.has(target.id));
-
-      ctx.beginPath();
-      ctx.moveTo(source.x, source.y);
-      ctx.lineTo(target.x, target.y);
-      ctx.strokeStyle = isActive ? palette.muted : `${palette.border}`;
-      ctx.lineWidth = (isActive ? 1.2 : 0.6) / globalScale;
-      ctx.stroke();
-
-      if (globalScale > 1.1 && isActive && link.relation) {
-        const midX = (source.x + target.x) / 2;
-        const midY = (source.y + target.y) / 2;
-        const fontSize = Math.max(8 / globalScale, 2.5);
-        ctx.font = `${fontSize}px "JetBrains Mono", monospace`;
-        ctx.textAlign = "center";
-        ctx.textBaseline = "middle";
-        ctx.fillStyle = palette.muted;
-        ctx.fillText(link.relation.replace(/_/g, " "), midX, midY);
-      }
-    },
-    [highlightIds, palette]
-  );
-
   return (
     <div ref={containerRef} className="w-full h-full min-h-0 bg-background">
       <ForceGraph2D
         ref={graphRef}
         width={size.width}
         height={size.height}
-        graphData={data}
+        graphData={graphData}
         backgroundColor={palette.background}
+        linkColor={() => palette.muted}
+        linkWidth={1.2}
+        linkDirectionalArrowLength={3.5}
+        linkDirectionalArrowRelPos={1}
+        linkDirectionalParticles={2}
+        linkDirectionalParticleWidth={2}
+        linkDirectionalParticleSpeed={0.004}
+        linkLabel={(link) =>
+          (link as GraphLink).relation.replace(/_/g, " ")
+        }
+        cooldownTicks={120}
+        d3AlphaDecay={0.02}
+        d3VelocityDecay={0.3}
         nodeCanvasObject={paintNode}
         nodePointerAreaPaint={(node, color, ctx) => {
           const n = node as GraphNode;
@@ -201,13 +195,6 @@ export function MemoryGraphCanvas({
           ctx.fillStyle = color;
           ctx.fill();
         }}
-        linkCanvasObject={paintLink}
-        linkDirectionalParticles={2}
-        linkDirectionalParticleWidth={2}
-        linkDirectionalParticleSpeed={0.004}
-        cooldownTicks={120}
-        d3AlphaDecay={0.02}
-        d3VelocityDecay={0.3}
         onNodeClick={(node) => {
           const n = node as GraphNode;
           onSelect(n.id === selectedId ? null : n.id);

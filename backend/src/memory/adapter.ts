@@ -88,11 +88,43 @@ export function searchResultToMemoryNode(
 
 export function buildGraphFromSearchResult(
   node: MemoryNode,
-  result: SearchMemoriesResponse.Result
+  result: SearchMemoriesResponse.Result,
+  allResults: SearchMemoriesResponse.Result[] = [result]
 ): MemoryGraph {
   const edges: MemoryGraph["edges"] = [];
-  const context = result.context;
+  const seen = new Set<string>();
 
+  const addEdge = (
+    neighbor: MemoryNode,
+    relation: MemoryGraph["edges"][number]["relation"],
+    weight = 1
+  ) => {
+    if (neighbor.id === node.id) return;
+    const key = [node.id, neighbor.id].sort().join("|");
+    if (seen.has(key)) return;
+    seen.add(key);
+
+    edges.push({
+      id: `edge-${edges.length}`,
+      from_id: node.id,
+      to_id: neighbor.id,
+      relation,
+      weight,
+      created_at: node.updated_at,
+      neighbor,
+    });
+  };
+
+  for (const item of allResults) {
+    if (item.id === node.id) continue;
+    addEdge(
+      searchResultToMemoryNode(item),
+      "related_to",
+      typeof item.similarity === "number" ? item.similarity : 0.5
+    );
+  }
+
+  const context = result.context;
   const related = [
     ...(context?.related ?? []),
     ...(context?.parents ?? []),
@@ -107,8 +139,13 @@ export function buildGraphFromSearchResult(
 
     if (!neighborContent.trim()) continue;
 
+    const itemId =
+      typeof item === "object" && item && "id" in item && typeof item.id === "string"
+        ? item.id
+        : `related-${edges.length}`;
+
     const neighbor: MemoryNode = {
-      id: `related-${edges.length}`,
+      id: itemId,
       type: "memory",
       title: neighborContent.slice(0, 60).toLowerCase(),
       content: neighborContent,
@@ -122,15 +159,7 @@ export function buildGraphFromSearchResult(
       updated_at: node.updated_at,
     };
 
-    edges.push({
-      id: `edge-${edges.length}`,
-      from_id: node.id,
-      to_id: neighbor.id,
-      relation: "related_to",
-      weight: 1,
-      created_at: node.updated_at,
-      neighbor,
-    });
+    addEdge(neighbor, "related_to");
   }
 
   return { node, edges };

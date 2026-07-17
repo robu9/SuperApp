@@ -7,12 +7,72 @@ function linkKey(from: string, to: string, relation: string): string {
   return `${a}|${b}|${relation}`;
 }
 
+export function linkEndpointId(endpoint: string | GraphNode): string {
+  return typeof endpoint === "string" ? endpoint : endpoint.id;
+}
+
+export function addHeuristicLinks(graph: MemoryGraphData): MemoryGraphData {
+  const links = [...graph.links];
+  const keys = new Set(links.map((l) => linkKey(linkEndpointId(l.source), linkEndpointId(l.target), l.relation)));
+
+  const addLink = (from: string, to: string, relation: string) => {
+    if (from === to) return;
+    const key = linkKey(from, to, relation);
+    if (keys.has(key)) return;
+    keys.add(key);
+    links.push({ source: from, target: to, relation });
+  };
+
+  for (let i = 0; i < graph.nodes.length; i++) {
+    for (let j = i + 1; j < graph.nodes.length; j++) {
+      const a = graph.nodes[i].memory;
+      const b = graph.nodes[j].memory;
+
+      if (a.app_name && a.app_name === b.app_name) {
+        addLink(a.id, b.id, "captured_in");
+      }
+
+      if (a.window_name && a.window_name === b.window_name) {
+        addLink(a.id, b.id, "mentions");
+      }
+    }
+  }
+
+  if (links.length === 0 && graph.nodes.length >= 2) {
+    const sorted = [...graph.nodes].sort(
+      (a, b) =>
+        new Date(a.memory.created_at).getTime() - new Date(b.memory.created_at).getTime()
+    );
+
+    for (let i = 0; i < sorted.length - 1; i++) {
+      addLink(sorted[i].id, sorted[i + 1].id, "follows");
+    }
+
+    for (let i = 0; i < sorted.length; i++) {
+      for (let j = i + 2; j < Math.min(i + 4, sorted.length); j++) {
+        addLink(sorted[i].id, sorted[j].id, "related_to");
+      }
+    }
+  }
+
+  return { nodes: graph.nodes, links };
+}
+
 export function mergeGraphResponse(
   graph: MemoryGraphData,
   response: MemoryGraphResponse
 ): MemoryGraphData {
   const nodes = new Map(graph.nodes.map((n) => [n.id, n]));
-  const links = new Map(graph.links.map((l) => [linkKey(l.source, l.target, l.relation), l]));
+  const links = new Map(
+    graph.links.map((l) => [
+      linkKey(linkEndpointId(l.source), linkEndpointId(l.target), l.relation),
+      {
+        source: linkEndpointId(l.source),
+        target: linkEndpointId(l.target),
+        relation: l.relation,
+      },
+    ])
+  );
 
   if (!nodes.has(response.node.id)) {
     nodes.set(response.node.id, memoryNodeToGraphNode(response.node));
@@ -69,6 +129,10 @@ export async function expandGraphForMemories(
   return result;
 }
 
+export function finalizeGraph(graph: MemoryGraphData): MemoryGraphData {
+  return addHeuristicLinks(graph);
+}
+
 export function filterGraphHighlight(
   graph: MemoryGraphData,
   query: string
@@ -82,8 +146,10 @@ export function filterGraphHighlight(
     if (haystack.includes(q)) {
       matched.add(node.id);
       for (const link of graph.links) {
-        if (link.source === node.id) matched.add(link.target);
-        if (link.target === node.id) matched.add(link.source);
+        const sourceId = linkEndpointId(link.source);
+        const targetId = linkEndpointId(link.target);
+        if (sourceId === node.id) matched.add(targetId);
+        if (targetId === node.id) matched.add(sourceId);
       }
     }
   }

@@ -15,8 +15,10 @@ import {
 import {
   expandGraphForMemories,
   filterGraphHighlight,
+  finalizeGraph,
   getNodeById,
   graphFromMemories,
+  linkEndpointId,
   mergeGraphResponse,
 } from "@/lib/memory-graph";
 
@@ -53,14 +55,16 @@ export function BrainSection() {
         edges: memoryStats.edges || list.data.length,
       });
 
-      const base = graphFromMemories(list.data);
+      const base = finalizeGraph(graphFromMemories(list.data));
       setGraph(base);
       setLoading(false);
 
       if (list.data.length === 0) return;
 
       setExpanding(true);
-      const expanded = await expandGraphForMemories(base, list.data.slice(0, 24));
+      const expanded = finalizeGraph(
+        await expandGraphForMemories(base, list.data.slice(0, 24))
+      );
       setGraph(expanded);
       setStats((prev) =>
         prev
@@ -97,7 +101,7 @@ export function BrainSection() {
     setExpanding(true);
     try {
       const response = await api.memoryGraph(id, 2);
-      setGraph((prev) => mergeGraphResponse(prev, response));
+      setGraph((prev) => finalizeGraph(mergeGraphResponse(prev, response)));
     } catch {
       // keep current graph
     } finally {
@@ -115,9 +119,11 @@ export function BrainSection() {
 
   const neighborCount = useMemo(() => {
     if (!selectedId) return 0;
-    return graph.links.filter(
-      (l) => l.source === selectedId || l.target === selectedId
-    ).length;
+    return graph.links.filter((l) => {
+      const sourceId = linkEndpointId(l.source);
+      const targetId = linkEndpointId(l.target);
+      return sourceId === selectedId || targetId === selectedId;
+    }).length;
   }, [graph.links, selectedId]);
 
   return (
@@ -241,10 +247,15 @@ export function BrainSection() {
                 </p>
                 <div className="flex flex-col border border-border">
                   {graph.links
-                    .filter((l) => l.source === selectedId || l.target === selectedId)
+                    .filter((l) => {
+                      const sourceId = linkEndpointId(l.source);
+                      const targetId = linkEndpointId(l.target);
+                      return sourceId === selectedId || targetId === selectedId;
+                    })
                     .map((link) => {
-                      const otherId =
-                        link.source === selectedId ? link.target : link.source;
+                      const sourceId = linkEndpointId(link.source);
+                      const targetId = linkEndpointId(link.target);
+                      const otherId = sourceId === selectedId ? targetId : sourceId;
                       const other = graph.nodes.find((n) => n.id === otherId);
                       if (!other) return null;
                       return (

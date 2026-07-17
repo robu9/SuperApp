@@ -257,7 +257,7 @@ export async function getNodeGraph(
       response.results.find((result) => result.id === id) ?? response.results[0];
 
     if (!match) return { node, edges: [] };
-    return buildGraphFromSearchResult(node, match);
+    return buildGraphFromSearchResult(node, match, response.results);
   } catch {
     const node = await getNode(id);
     return node ? { node, edges: [] } : null;
