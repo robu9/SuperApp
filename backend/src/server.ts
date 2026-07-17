@@ -1,9 +1,7 @@
 import { readFileSync, existsSync } from "fs";
-import type { Server as HttpServer } from "http";
 import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { serve } from "@hono/node-server";
-import { WebSocketServer } from "ws";
 import { API_HOST, API_PORT, AUDIO_ENABLED, AUTO_START_CAPTURE, DATA_DIR, GEMINI_MODEL, OCR_ENABLED } from "./config.js";
 import { captureEngine } from "./capture/engine.js";
 import {
@@ -38,12 +36,13 @@ import {
 } from "./db/meetings.js";
 import type { ContentType } from "./types.js";
 import {
+  buildSystemInstruction,
   generateGeminiReply,
   summarizeMeeting,
   type ChatTurn,
 } from "./llm/gemini.js";
+import { mintGeminiLiveToken } from "./llm/gemini-live.js";
 import { buildChatContext } from "./chat/context.js";
-import { attachLiveChatSocket } from "./chat/live-socket.js";
 import { COMPOSIO_ENABLED } from "./connectors/config.js";
 import {
   connectionStatus,
@@ -546,6 +545,48 @@ app.post("/chat", async (c) => {
   }
 });
 
+/**
+ * Mint a Gemini Live ephemeral token (Snappy-style).
+ * Client connects directly to BidiGenerateContentConstrained with the token.
+ * Same SuperMemory context + system prompt architecture as POST /chat.
+ */
+app.post("/chat/live/session", async (c) => {
+  try {
+    const body = await c.req.json<{
+      messages?: ChatTurn[];
+      context_query?: string;
+    }>();
+
+    const messages = Array.isArray(body.messages) ? body.messages : [];
+    const lastUser = [...messages]
+      .reverse()
+      .find((m) => m.role === "user")?.content;
+    const searchQuery = body.context_query ?? lastUser ?? "recent activity";
+
+    const { snippets, recording } = await buildChatContext(searchQuery);
+    const systemInstruction = buildSystemInstruction(snippets, recording, false, {
+      voice: true,
+    });
+
+    const live = await mintGeminiLiveToken(systemInstruction);
+    return c.json({
+      token: live.token,
+      model: live.model,
+      voice: live.voice,
+      systemInstruction,
+      provider: "gemini",
+    });
+  } catch (err) {
+    return c.json(
+      {
+        error:
+          err instanceof Error ? err.message : "live session mint failed",
+      },
+      500
+    );
+  }
+});
+
 app.get("/memory/stats", async (c) => {
   return c.json(await getMemoryStats());
 });
@@ -744,20 +785,8 @@ export function startServer(): void {
     }
   }
 
-  const server = serve(
-    { fetch: app.fetch, hostname: API_HOST, port: API_PORT },
-    () => {
-      console.log(`[server] superapp api http://${API_HOST}:${API_PORT}`);
-      console.log(`[server] live voice ws://${API_HOST}:${API_PORT}/chat/live`);
-    }
-  );
-
-  const wss = new WebSocketServer({
-    server: server as HttpServer,
-    path: "/chat/live",
-  });
-  wss.on("connection", (socket) => {
-    attachLiveChatSocket(socket);
+  serve({ fetch: app.fetch, hostname: API_HOST, port: API_PORT }, () => {
+    console.log(`[server] superapp api http://${API_HOST}:${API_PORT}`);
   });
 }
 

@@ -54,11 +54,12 @@ export const GEMINI_API_KEY =
   process.env.GEMINI_API_KEY ?? process.env.GOOGLE_API_KEY ?? "";
 export const GEMINI_MODEL =
   process.env.GEMINI_MODEL ?? "gemini-2.5-flash";
-/** Native-audio model for live voice (BidiGenerateContent). */
+/** Native-audio Live model — same as Snappy (`gemini-3.1-flash-live-preview`). */
 export const GEMINI_LIVE_MODEL =
-  process.env.GEMINI_LIVE_MODEL ?? "gemini-2.5-flash-native-audio-latest";
+  process.env.GEMINI_LIVE_MODEL ?? "models/gemini-3.1-flash-live-preview";
+/** Prebuilt Live voice (Snappy uses Aoede). */
 export const GEMINI_LIVE_VOICE =
-  process.env.GEMINI_LIVE_VOICE ?? "Puck";
+  process.env.GEMINI_LIVE_VOICE ?? "Aoede";
 
 /** Official Supermemory local server — see https://supermemory.ai/docs/self-hosting/overview */
 export const SUPERMEMORY_BASE_URL =

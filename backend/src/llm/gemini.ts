@@ -58,6 +58,15 @@ export function buildSystemInstruction(
     `Captured history snippets attached: ${contextSnippets.length}`,
   ].join("\n");
 
+  const voiceContextBlock =
+    options.voice && hasHistory
+      ? [
+          "",
+          "SuperMemory context (use this when answering):",
+          ...contextSnippets.map((snippet, i) => `${i + 1}. ${snippet}`),
+        ].join("\n")
+      : "";
+
   return [
     "You are SuperApp, a helpful AI assistant inside a desktop app that records the user's screen and audio locally.",
     "Your context comes from SuperMemory — a local graph of screen captures, audio, meetings, tasks, and pinned memories.",
@@ -74,13 +83,16 @@ export function buildSystemInstruction(
     "- Related memories may be linked in the graph (same app, meeting, or topic) — use those connections when helpful.",
     `Current capture status:\n${statusLines}`,
     hasHistory
-      ? "History snippets are in the messages below — use them."
+      ? options.voice
+        ? "History snippets are included below — use them."
+        : "History snippets are in the messages below — use them."
       : recording.framesCaptured > 0
         ? "Frames exist but no readable text was extracted from recent captures."
         : "No captures yet — the engine may have just started.",
     hasTools
       ? "You have connected tools (e.g. gmail, google calendar, slack, notion). When the user asks you to read, search, send, or create something in a connected app, call the appropriate tool instead of guessing. Use tool results to answer."
       : "",
+    voiceContextBlock,
   ]
     .filter(Boolean)
     .join("\n");

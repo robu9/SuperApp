@@ -1,14 +1,4 @@
-import { getApiBaseUrl } from "@/lib/api/client";
-
-export type LiveServerEvent =
-  | { type: "ready"; model: string; voice: string; provider: string }
-  | { type: "audio"; data: string }
-  | { type: "user_transcript"; text: string; finished: boolean }
-  | { type: "assistant_transcript"; text: string; finished: boolean }
-  | { type: "turn_complete"; user: string; assistant: string }
-  | { type: "interrupted" }
-  | { type: "error"; message: string }
-  | { type: "closed" };
+import { api } from "@/lib/api/client";
 
 export interface LiveVoiceHandlers {
   onReady?: () => void;
@@ -20,6 +10,13 @@ export interface LiveVoiceHandlers {
   onClosed?: () => void;
 }
 
+const SETUP_TIMEOUT_MS = 20_000;
+
+/** Snappy-style Constrained Live WebSocket URL. */
+function buildLiveWebSocketUrl(ephemeralToken: string): string {
+  return `wss://generativelanguage.googleapis.com/ws/google.ai.generativelanguage.v1alpha.GenerativeService.BidiGenerateContentConstrained?access_token=${encodeURIComponent(ephemeralToken)}`;
+}
+
 function floatTo16BitPCM(float32: Float32Array): Int16Array {
   const out = new Int16Array(float32.length);
   for (let i = 0; i < float32.length; i++) {
@@ -29,11 +26,7 @@ function floatTo16BitPCM(float32: Float32Array): Int16Array {
   return out;
 }
 
-/** Downsample Float32 audio from sourceRate → 16 kHz. */
-function downsampleTo16k(
-  input: Float32Array,
-  sourceRate: number
-): Float32Array {
+function downsampleTo16k(input: Float32Array, sourceRate: number): Float32Array {
   if (sourceRate === 16000) return input;
   const ratio = sourceRate / 16000;
   const newLength = Math.floor(input.length / ratio);
@@ -45,7 +38,11 @@ function downsampleTo16k(
 }
 
 function int16ToBase64(samples: Int16Array): string {
-  const bytes = new Uint8Array(samples.buffer, samples.byteOffset, samples.byteLength);
+  const bytes = new Uint8Array(
+    samples.buffer,
+    samples.byteOffset,
+    samples.byteLength
+  );
   let binary = "";
   const chunk = 0x8000;
   for (let i = 0; i < bytes.length; i += chunk) {
@@ -64,9 +61,10 @@ function base64ToInt16(base64: string): Int16Array {
 }
 
 /**
- * Browser-side Gemini Live voice session.
- * Mic → PCM16@16kHz → backend WS → Gemini Live; plays 24kHz PCM replies.
- * Turn transcripts are written into the same chat store as typed messages.
+ * Gemini Live voice — same methodology as Snappy:
+ * 1) Backend mints ephemeral token + system instruction (with SuperMemory context)
+ * 2) Renderer opens BidiGenerateContentConstrained directly
+ * 3) Model: models/gemini-3.1-flash-live-preview
  */
 export class LiveVoiceSession {
   private ws: WebSocket | null = null;
@@ -76,6 +74,9 @@ export class LiveVoiceSession {
   private processor: ScriptProcessorNode | null = null;
   private nextPlayTime = 0;
   private closed = false;
+  private setupComplete = false;
+  private userTranscript = "";
+  private assistantTranscript = "";
 
   constructor(private readonly handlers: LiveVoiceHandlers = {}) {}
 
@@ -89,58 +90,97 @@ export class LiveVoiceSession {
   }): Promise<void> {
     if (this.ws) throw new Error("live session already started");
 
-    const base = await getApiBaseUrl();
-    const wsUrl = base.replace(/^http/, "ws") + "/chat/live";
+    const session = await api.liveSession({
+      messages: params.messages,
+      context_query: params.contextQuery,
+    });
+
+    const model = session.model.startsWith("models/")
+      ? session.model
+      : `models/${session.model}`;
 
     await new Promise<void>((resolve, reject) => {
-      const ws = new WebSocket(wsUrl);
-      this.ws = ws;
       let settled = false;
-
       const fail = (err: Error) => {
         if (settled) return;
         settled = true;
         reject(err);
       };
+      const succeed = () => {
+        if (settled) return;
+        settled = true;
+        resolve();
+      };
+
+      const setupTimer = window.setTimeout(() => {
+        fail(new Error("Gemini Live setup timed out"));
+        this.ws?.close();
+      }, SETUP_TIMEOUT_MS);
+
+      const ws = new WebSocket(buildLiveWebSocketUrl(session.token));
+      ws.binaryType = "arraybuffer";
+      this.ws = ws;
 
       ws.onopen = () => {
+        // Client setup owns voice / modalities (token locks systemInstruction).
         ws.send(
           JSON.stringify({
-            type: "start",
-            messages: params.messages,
-            context_query: params.contextQuery,
+            setup: {
+              model,
+              generationConfig: {
+                responseModalities: ["AUDIO"],
+                mediaResolution: "MEDIA_RESOLUTION_HIGH",
+                speechConfig: {
+                  voiceConfig: {
+                    prebuiltVoiceConfig: {
+                      voiceName: session.voice || "Aoede",
+                    },
+                  },
+                },
+              },
+              systemInstruction: {
+                parts: [{ text: session.systemInstruction }],
+              },
+              inputAudioTranscription: {},
+              outputAudioTranscription: {},
+              contextWindowCompression: {
+                triggerTokens: 104857,
+                slidingWindow: { targetTokens: 52428 },
+              },
+            },
           })
         );
       };
 
       ws.onmessage = (event) => {
-        let msg: LiveServerEvent;
-        try {
-          msg = JSON.parse(String(event.data)) as LiveServerEvent;
-        } catch {
-          return;
-        }
-
-        if (msg.type === "ready") {
-          if (!settled) {
-            settled = true;
-            void this.startMic()
-              .then(() => {
-                this.handlers.onReady?.();
-                resolve();
-              })
-              .catch(fail);
-          }
-          return;
-        }
-
-        this.handleServerEvent(msg);
+        void this.handleMessage(event.data)
+          .then(() => {
+            if (this.setupComplete && !settled) {
+              window.clearTimeout(setupTimer);
+              void this.startMic()
+                .then(() => {
+                  this.seedHistory(params.messages);
+                  this.handlers.onReady?.();
+                  succeed();
+                })
+                .catch(fail);
+            }
+          })
+          .catch((err) =>
+            fail(err instanceof Error ? err : new Error(String(err)))
+          );
       };
 
-      ws.onerror = () => fail(new Error("live voice websocket failed"));
+      ws.onerror = () => {
+        window.clearTimeout(setupTimer);
+        fail(new Error("Gemini Live websocket failed"));
+      };
+
       ws.onclose = () => {
+        window.clearTimeout(setupTimer);
+        this.setupComplete = false;
         if (!settled) {
-          fail(new Error("live voice closed before ready"));
+          fail(new Error("Gemini Live closed before setup completed"));
           return;
         }
         void this.teardownMedia();
@@ -151,46 +191,124 @@ export class LiveVoiceSession {
 
   stop(): void {
     this.closed = true;
-    if (this.ws?.readyState === WebSocket.OPEN) {
+    this.setupComplete = false;
+    if (this.ws) {
       try {
-        this.ws.send(JSON.stringify({ type: "audio_end" }));
-        this.ws.send(JSON.stringify({ type: "stop" }));
+        this.ws.close();
       } catch {
         // ignore
       }
-      this.ws.close();
     }
     this.ws = null;
     void this.teardownMedia();
   }
 
-  private handleServerEvent(msg: LiveServerEvent): void {
-    switch (msg.type) {
-      case "audio":
-        this.enqueuePlayback(msg.data);
-        break;
-      case "user_transcript":
-        this.handlers.onUserTranscript?.(msg.text);
-        break;
-      case "assistant_transcript":
-        this.handlers.onAssistantTranscript?.(msg.text);
-        break;
-      case "turn_complete":
-        this.handlers.onTurnComplete?.(msg.user, msg.assistant);
-        break;
-      case "interrupted":
-        this.nextPlayTime = this.playbackCtx?.currentTime ?? 0;
-        this.handlers.onInterrupted?.();
-        break;
-      case "error":
-        this.handlers.onError?.(msg.message);
-        break;
-      case "closed":
-        void this.teardownMedia();
-        this.handlers.onClosed?.();
-        break;
-      default:
-        break;
+  private seedHistory(
+    messages: Array<{ role: "user" | "assistant"; content: string }>
+  ): void {
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+    const turns = messages
+      .filter((m) => m.content.trim())
+      .map((m) => ({
+        role: m.role === "assistant" ? "model" : "user",
+        parts: [{ text: m.content }],
+      }));
+    if (turns.length === 0) return;
+    this.ws.send(
+      JSON.stringify({
+        clientContent: { turns, turnComplete: false },
+      })
+    );
+  }
+
+  private async handleMessage(rawData: unknown): Promise<void> {
+    let parsed: Record<string, unknown>;
+    try {
+      if (rawData instanceof ArrayBuffer) {
+        parsed = JSON.parse(new TextDecoder().decode(rawData)) as Record<
+          string,
+          unknown
+        >;
+      } else if (typeof rawData === "string") {
+        parsed = JSON.parse(rawData) as Record<string, unknown>;
+      } else if (rawData instanceof Blob) {
+        parsed = JSON.parse(await rawData.text()) as Record<string, unknown>;
+      } else {
+        return;
+      }
+    } catch {
+      return;
+    }
+
+    if (parsed.error != null) {
+      const errorPayload = parsed.error as Record<string, unknown>;
+      const message = String(
+        errorPayload.message ?? errorPayload.status ?? "live error"
+      );
+      this.handlers.onError?.(message);
+      return;
+    }
+
+    if (parsed.setupComplete != null) {
+      this.setupComplete = true;
+      return;
+    }
+
+    const serverContent = parsed.serverContent as
+      | Record<string, unknown>
+      | undefined;
+    if (!serverContent) return;
+
+    if (serverContent.interrupted) {
+      this.assistantTranscript = "";
+      this.nextPlayTime = this.playbackCtx?.currentTime ?? 0;
+      this.handlers.onInterrupted?.();
+    }
+
+    const inputTranscription = serverContent.inputTranscription as
+      | { text?: string }
+      | undefined;
+    if (inputTranscription?.text) {
+      // Gemini Live sends incremental transcript deltas (Snappy-style append).
+      this.userTranscript += inputTranscription.text;
+      this.handlers.onUserTranscript?.(this.userTranscript);
+    }
+
+    const outputTranscription = serverContent.outputTranscription as
+      | { text?: string }
+      | undefined;
+    if (outputTranscription?.text) {
+      this.assistantTranscript += outputTranscription.text;
+      this.handlers.onAssistantTranscript?.(this.assistantTranscript);
+    }
+
+    const modelTurn = serverContent.modelTurn as
+      | { parts?: Array<Record<string, unknown>> }
+      | undefined;
+    if (modelTurn?.parts) {
+      for (const part of modelTurn.parts) {
+        const inlineData = part.inlineData as
+          | { data?: string; mimeType?: string }
+          | undefined;
+        if (inlineData?.data) {
+          const mimeType = inlineData.mimeType ?? "";
+          if (
+            mimeType.includes("audio") ||
+            mimeType.includes("pcm") ||
+            mimeType === ""
+          ) {
+            this.enqueuePlayback(inlineData.data);
+          }
+        }
+      }
+    }
+
+    if (serverContent.turnComplete) {
+      const user = this.userTranscript.trim();
+      const assistant = this.assistantTranscript.trim();
+      this.handlers.onTurnComplete?.(user, assistant);
+      this.userTranscript = "";
+      this.assistantTranscript = "";
     }
   }
 
@@ -206,19 +324,31 @@ export class LiveVoiceSession {
 
     this.captureCtx = new AudioContext();
     const source = this.captureCtx.createMediaStreamSource(this.mediaStream);
-    // ScriptProcessor is deprecated but widely available; fine for desktop app mic streaming.
     this.processor = this.captureCtx.createScriptProcessor(4096, 1, 1);
     this.processor.onaudioprocess = (event) => {
-      if (!this.ws || this.ws.readyState !== WebSocket.OPEN) return;
+      if (
+        !this.ws ||
+        this.ws.readyState !== WebSocket.OPEN ||
+        !this.setupComplete
+      ) {
+        return;
+      }
       const input = event.inputBuffer.getChannelData(0);
       const down = downsampleTo16k(input, this.captureCtx!.sampleRate);
       const pcm = floatTo16BitPCM(down);
-      const data = int16ToBase64(pcm);
-      this.ws.send(JSON.stringify({ type: "audio", data }));
+      this.ws.send(
+        JSON.stringify({
+          realtimeInput: {
+            audio: {
+              data: int16ToBase64(pcm),
+              mimeType: "audio/pcm;rate=16000",
+            },
+          },
+        })
+      );
     };
 
     source.connect(this.processor);
-    // Keep the graph alive without playing mic into speakers.
     const mute = this.captureCtx.createGain();
     mute.gain.value = 0;
     this.processor.connect(mute);

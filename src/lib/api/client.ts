@@ -111,6 +111,19 @@ export interface ChatResponse {
   provider: string;
 }
 
+export interface LiveSessionRequest {
+  messages?: Array<{ role: "user" | "assistant"; content: string }>;
+  context_query?: string;
+}
+
+export interface LiveSessionResponse {
+  token: string;
+  model: string;
+  voice: string;
+  systemInstruction: string;
+  provider: string;
+}
+
 export interface MemoryNode {
   id: string;
   type: string;
@@ -279,6 +292,8 @@ export const api = {
   audioStart: () => request<{ recording: boolean }>("POST", "/audio/start"),
   audioStop: () => request<{ recording: boolean }>("POST", "/audio/stop"),
   chat: (body: ChatRequest) => request<ChatResponse>("POST", "/chat", body),
+  liveSession: (body: LiveSessionRequest) =>
+    request<LiveSessionResponse>("POST", "/chat/live/session", body),
   meetings: () => request<{ data: MeetingListItem[] }>("GET", "/meetings"),
   meeting: (id: number) => request<MeetingDetail>("GET", `/meetings/${id}`),
   updateMeeting: (id: number, body: { title?: string | null; notes?: string | null }) =>
