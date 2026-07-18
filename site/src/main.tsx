@@ -1,52 +1,7 @@
 import React from "react";
 import ReactDOM from "react-dom/client";
 import { Analytics } from "@vercel/analytics/react";
-import { track } from "@vercel/analytics";
 import "./styles.css";
-
-const RELEASE_ROOT = "https://github.com/robu9/SuperApp/releases/latest/download";
-const DOWNLOADS = {
-  mac: `${RELEASE_ROOT}/SuperApp-universal.dmg`,
-  linux: `${RELEASE_ROOT}/SuperApp-x86_64.AppImage`,
-};
-
-type Platform = keyof typeof DOWNLOADS;
-
-function detectedPlatform(): Platform {
-  if (typeof navigator === "undefined") return "mac";
-  return /Linux/i.test(navigator.userAgent) ? "linux" : "mac";
-}
-
-function DownloadLink({
-  platform,
-  variant = "outline",
-  size,
-}: {
-  platform: Platform;
-  variant?: "primary" | "outline";
-  size?: "lg";
-}) {
-  const label = platform === "mac" ? "Download for macOS" : "Download for Linux";
-  return (
-    <a
-      className={`btn btn-${variant}${size === "lg" ? " btn-lg" : ""}`}
-      href={DOWNLOADS[platform]}
-      onClick={() =>
-        track("download", {
-          platform,
-          artifact: DOWNLOADS[platform].split("/").at(-1) ?? "unknown",
-        })
-      }
-    >
-      {label}
-      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true">
-        <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-        <polyline points="7 10 12 15 17 10" />
-        <line x1="12" y1="15" x2="12" y2="3" />
-      </svg>
-    </a>
-  );
-}
 
 const NAV_ITEMS = [
   { label: "Chat", active: true, icon: (
@@ -129,8 +84,8 @@ const PRIVACY_POINTS = [
     description: "SuperApp and Supermemory are one managed local experience. Your data never leaves your machine.",
   },
   {
-    title: "No content in analytics",
-    description: "Download tracking records only the platform and artifact — never captured screen or audio content.",
+    title: "No content in site analytics",
+    description: "Vercel Analytics records basic visit events — never any of your captured screen or audio content.",
   },
   {
     title: "You control what's stored",
@@ -139,9 +94,6 @@ const PRIVACY_POINTS = [
 ];
 
 function App() {
-  const platform = detectedPlatform();
-  const alternate: Platform = platform === "mac" ? "linux" : "mac";
-
   return (
     <>
       <header className="site-header">
@@ -154,8 +106,7 @@ function App() {
             <a href="#features">Features</a>
             <a href="#how">How it works</a>
             <a href="#privacy">Privacy</a>
-            <a href="https://github.com/robu9/SuperApp">GitHub</a>
-            <DownloadLink platform={platform} variant="primary" />
+            <a href="https://github.com/robu9/SuperApp" className="btn btn-primary">GitHub</a>
           </nav>
         </div>
       </header>
@@ -177,10 +128,14 @@ function App() {
             .
           </p>
           <div className="download-row">
-            <DownloadLink platform={platform} variant="primary" size="lg" />
-            <DownloadLink platform={alternate} variant="outline" size="lg" />
+            <a className="btn btn-primary btn-lg" href="https://github.com/robu9/SuperApp">
+              View on GitHub
+              <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginLeft: "6px", display: "inline-block", verticalAlign: "middle" }}>
+                <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+              </svg>
+            </a>
           </div>
-          <p className="fine-print">macOS universal · Linux x64 · Supermemory installs automatically</p>
+          <p className="fine-print">SuperApp is fully open source under active development</p>
         </section>
 
         <section className="preview-section shell" aria-label="SuperApp product preview">
@@ -308,8 +263,13 @@ function App() {
 
         <section className="final-cta shell">
           <h2>Remember more. Repeat less.</h2>
-          <p>Download SuperApp and start building your local memory graph.</p>
-          <DownloadLink platform={platform} variant="primary" size="lg" />
+          <p>Explore SuperApp on GitHub and start building your local memory graph.</p>
+          <a className="btn btn-primary btn-lg" href="https://github.com/robu9/SuperApp">
+            View on GitHub
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" aria-hidden="true" style={{ marginLeft: "6px", display: "inline-block", verticalAlign: "middle" }}>
+              <path d="M9 19c-5 1.5-5-2.5-7-3m14 6v-3.87a3.37 3.37 0 0 0-.94-2.61c3.14-.35 6.44-1.54 6.44-7A5.44 5.44 0 0 0 20 4.77 5.07 5.07 0 0 0 19.91 1S18.73.65 16 2.48a13.38 13.38 0 0 0-7 0C6.27.65 5.09 1 5.09 1A5.07 5.07 0 0 0 5 4.77a5.44 5.44 0 0 0-1.5 3.78c0 5.42 3.3 6.61 6.44 7A3.37 3.37 0 0 0 9 18.13V22" />
+            </svg>
+          </a>
         </section>
       </main>
 
