@@ -3,7 +3,7 @@
   "version": "0.1.0",
   "private": true,
   "type": "module",
-  "description": "SuperApp capture engine — Screenpipe-compatible local API",
+  "description": "SuperApp capture engine — local API",
   "main": "dist/index.js",
   "scripts": {
     "dev": "tsx watch src/index.ts",
