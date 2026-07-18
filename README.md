@@ -50,11 +50,6 @@ runtime, landing site, and release workflow all live in this repository.
 | App connections | Optional | Requires Composio and the relevant external accounts |
 | Packaged downloads | Available | Unsigned universal macOS DMG and Linux x64 AppImage |
 
-SuperApp is not yet at full Screenpipe parity. Native accessibility-tree
-extraction, speaker diarization, semantic search across the capture database,
-an MCP server, and a general-purpose third-party pipe runtime remain roadmap
-items.
-
 ## Local-first and privacy model
 
 “Local-first” describes where capture and storage happen; it does not mean every
@@ -215,11 +210,6 @@ captured content remains under `~/.superapp/` unless configured otherwise.
 
 The macOS build stages both Sharp/libvips and FFmpeg architectures before
 electron-builder creates the universal application.
-
-## Local API
-
-The capture engine exposes a Screenpipe-compatible REST API at
-`http://127.0.0.1:3030`.
 
 ```bash
 curl http://127.0.0.1:3030/health
