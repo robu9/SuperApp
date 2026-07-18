@@ -300,6 +300,5 @@ repository as fully open source.
 ## Acknowledgements
 
 - [Supermemory](https://supermemory.ai) for the local memory runtime and client.
-- [Screenpipe](https://github.com/mediar-ai/screenpipe) for the local capture API
   conventions that SuperApp is working toward.
 - Electron, React, Hono, SQLite, Gemini, and Composio for the application stack.
